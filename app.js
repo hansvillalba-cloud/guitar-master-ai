@@ -32,25 +32,31 @@ function freqToMidi(freq){return Math.round(69+12*Math.log2(freq/440))}
 function midiToFreq(midi){return 440*Math.pow(2,(midi-69)/12)}
 function noteCents(freq,midi){return 1200*Math.log2(freq/midiToFreq(midi))}
 function detectPitch(buffer,sampleRate){
-  let rms=0;for(let i=0;i<buffer.length;i++)rms+=buffer[i]*buffer[i];rms=Math.sqrt(rms/buffer.length);
-  if(rms<0.009)return null;
-  // Autocorrelation: robust enough for a first monophonic tuner; not a polyphonic chord recognizer.
-  const SIZE=buffer.length, minLag=Math.floor(sampleRate/1000), maxLag=Math.min(Math.floor(sampleRate/65),SIZE-2);
-  let bestLag=-1,best=0,prev=1;
-  for(let lag=minLag;lag<=maxLag;lag++){
-    let corr=0;for(let i=0;i<SIZE-lag;i++)corr+=buffer[i]*buffer[i+lag];
-    corr/=SIZE-lag;
-    if(corr>best){best=corr;bestLag=lag;}
-    if(lag>minLag && corr<prev && bestLag>0 && best>0.01)break;
-    prev=corr;
+  // Downsample by 2 and use normalized autocorrelation. The earlier version
+  // selected the first falling sample as a period, which caused false notes
+  // and made low guitar/bass frequencies disappear.
+  const stride=2,count=Math.floor(buffer.length/stride),effectiveRate=sampleRate/stride;
+  let mean=0,rms=0;for(let i=0;i<count;i++){const v=buffer[i*stride];mean+=v;rms+=v*v}mean/=count;rms=Math.sqrt(rms/count);
+  if(rms<0.006)return null;
+  const minLag=Math.max(2,Math.floor(effectiveRate/1200)),maxLag=Math.min(Math.floor(effectiveRate/35),count-2);
+  const correlation=lag=>{
+    let sum=0,powerA=0,powerB=0;
+    for(let i=0;i<count-lag;i++){const a=buffer[i*stride]-mean,b=buffer[(i+lag)*stride]-mean;sum+=a*b;powerA+=a*a;powerB+=b*b}
+    return powerA&&powerB?sum/Math.sqrt(powerA*powerB):0;
+  };
+  let beforePrevious=correlation(minLag),previous=correlation(minLag+1),valleyFound=false,bestLag=-1,best=0;
+  for(let lag=minLag+2;lag<=maxLag;lag++){
+    const current=correlation(lag);
+    if(!valleyFound&&previous<beforePrevious&&previous<=current)valleyFound=true;
+    if(valleyFound&&previous>beforePrevious&&previous>=current){bestLag=lag-1;best=previous;break}
+    if(current>best){best=current;bestLag=lag}
+    beforePrevious=previous;previous=current;
   }
-  if(bestLag<0 || best<0.01)return null;
-  // Refine lag using neighbouring correlation values.
-  const correlation = lag => {let c=0;for(let i=0;i<SIZE-lag;i++)c+=buffer[i]*buffer[i+lag];return c/(SIZE-lag)};
-  const y1=correlation(bestLag-1),y2=correlation(bestLag),y3=correlation(bestLag+1);
-  const denom=(y1-2*y2+y3), shift=denom?0.5*(y1-y3)/denom:0;
-  const period=bestLag+shift, frequency=sampleRate/period;
-  if(frequency<60||frequency>1200)return null;
+  if(bestLag<0||best<0.18)return null;
+  const y1=correlation(bestLag-1),y2=correlation(bestLag),y3=correlation(bestLag+1),denom=y1-2*y2+y3;
+  const shift=denom?Math.max(-0.5,Math.min(0.5,0.5*(y1-y3)/denom)):0;
+  const frequency=effectiveRate/(bestLag+shift);
+  if(frequency<35||frequency>1400)return null;
   return {frequency,midi:freqToMidi(frequency),rms};
 }
 async function connectAudio(){
@@ -85,14 +91,16 @@ function disconnectAudio(){
   $("connectBtn").disabled=false;$("disconnectBtn").disabled=true;$("tunerInputLabel").textContent="Esperando audio…";toast("Audio desconectado.");
 }
 function startAudioLoop(){
-  const buffer=new Float32Array(analyser.fftSize);
-  const tick=()=>{
+  const buffer=new Float32Array(analyser.fftSize);let lastAnalysis=0;
+  const tick=now=>{
     if(!analyser)return;
-    analyser.getFloatTimeDomainData(buffer);
-    const result=detectPitch(buffer,audioCtx.sampleRate);
-    if(result){lastDetected=result;updateTuner(result);updatePractice(result)}
+    if(now-lastAnalysis>=65){
+      lastAnalysis=now;analyser.getFloatTimeDomainData(buffer);
+      const result=detectPitch(buffer,audioCtx.sampleRate);
+      if(result){lastDetected=result;updateTuner(result);updatePractice(result)}
+    }
     raf=requestAnimationFrame(tick);
-  };tick();
+  };raf=requestAnimationFrame(tick);
 }
 function updateTuner(result){
   const midi=result.midi, name=midiName(midi),cents=noteCents(result.frequency,midi);
@@ -127,6 +135,11 @@ function updatePractice(result){
   const now=performance.now();
   if(cents<=35 && now-lastScoredAt>650){
     lastScoredAt=now;attempts++;hits++;streak++;score+=100;setFeedback("¡Correcto!",true);updateScore();
+    if(songPracticeMode){
+      songPracticeIndex++;
+      if(songPracticeIndex>=songPracticeNotes.length){songPracticeMode=false;songPracticeNotes=[];songPracticeIndex=0;setFeedback("¡Terminaste la canción!",true);}
+      else setTimeout(()=>{if(songPracticeMode)setExercise()},220);
+    }
   }else if(cents>35 && now-lastScoredAt>1300){
     // Count a mismatch only when a stable detected pitch is clearly different.
     lastScoredAt=now;attempts++;streak=0;setFeedback("Revisa la nota",false);updateScore();
@@ -222,11 +235,11 @@ function songExt(name){return (name.split(".").pop()||"").toLowerCase()}
 function songType(ext){if(["gp3","gp4","gp5","gpx","gp"].includes(ext))return "guitarpro";if(["mid","midi"].includes(ext))return "midi";if(["mp3","wav"].includes(ext))return "audio";return "unknown"}
 function prettySize(bytes){if(bytes<1024*1024)return (bytes/1024).toFixed(0)+" KB";return (bytes/1024/1024).toFixed(1)+" MB"}
 async function importSongFiles(files){
-  const accepted=["gp3","gp4","gp5","gpx","gp","mid","midi","mp3","wav"];
+  const accepted=["gp3","gp4","gp5","gpx","gp","mid","midi","mp3","wav"];let singleAudioId=null;
   for(const file of files){
     const ext=songExt(file.name),type=songType(ext);
     if(!accepted.includes(ext)){toast("Formato no compatible: "+file.name);continue}
-    if(file.size>40*1024*1024){toast(file.name+" supera el límite recomendado de 40 MB.");continue}
+    if(file.size>100*1024*1024){toast(file.name+" supera el límite de 100 MB.");continue}
     try{
       const record={id:crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random(),name:file.name,ext,type,size:file.size,addedAt:Date.now(),blob:file};
       if(type==="midi"){
@@ -234,10 +247,12 @@ async function importSongFiles(files){
         if(!record.parsed.notes.length)throw new Error("No se encontraron notas MIDI.");
       }
       await songDbAction("readwrite",record);
+      if(files.length===1&&type==="audio")singleAudioId=record.id;
       toast("Agregada: "+file.name);
     }catch(e){console.error(e);toast("No se pudo importar "+file.name+": "+(e.message||"archivo inválido"))}
   }
   await renderSongLibrary();
+  if(singleAudioId)await openSong(singleAudioId);
 }
 function parseMidi(buffer){
   const v=new DataView(buffer);let pos=0;
@@ -279,20 +294,29 @@ async function renderSongLibrary(){
   root.innerHTML=`<p class="eyebrow">MIS ARCHIVOS</p>${personal||'<p class="empty-library">Aún no has importado canciones propias.</p>'}<p class="eyebrow builtin-heading">BIBLIOTECA GUITAR MASTER · EJERCICIOS ORIGINALES</p>${builtins}`;
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-function closeSongWorkspace(){stopMidiPlayback();if(alphaTabApi){try{alphaTabApi.destroy()}catch(e){}alphaTabApi=null}if(currentSongAudioUrl){URL.revokeObjectURL(currentSongAudioUrl);currentSongAudioUrl=null}$("songWorkspace").hidden=true;$("songAudio").pause();$("songAudio").removeAttribute("src")}
+function closeSongWorkspace(){
+  stopMidiPlayback();stopAudioSong();
+  if(alphaTabApi){try{alphaTabApi.destroy()}catch(e){}alphaTabApi=null}
+  if(currentSongAudioUrl){URL.revokeObjectURL(currentSongAudioUrl);currentSongAudioUrl=null}
+  $("songWorkspace").hidden=true;const audio=$("songAudio");audio.pause();audio.removeAttribute("src");audio.load();
+}
 async function openSong(id){
-  const r=id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):await songDbAction("readonly",{id});if(!r)return;
-  closeSongWorkspace();$("songWorkspace").hidden=false;$("songTitle").textContent=r.name;$("songMeta").textContent=r.id.startsWith("builtin:")?"Ejercicio original incluido en Guitar Master AI":""+r.ext.toUpperCase()+" · "+prettySize(r.size)+" · guardado en este dispositivo";
-  $("audioSongPlayer").hidden=r.type!=="audio";$("midiSongPlayer").hidden=r.type!=="midi";$("gpSongPlayer").hidden=r.type!=="guitarpro";
-  if(r.type==="audio"){
-    currentSongAudioUrl=URL.createObjectURL(r.blob);const audio=$("songAudio");audio.src=currentSongAudioUrl;audio.load();
-  }else if(r.type==="midi"){
-    songPracticeMode=false;songPracticeNotes=[];songPracticeIndex=0;
-    currentMidiNotes=r.parsed.notes;renderMidiNotes(currentMidiNotes);$("midiSummary").textContent=`${r.parsed.notes.length} notas · ${r.parsed.tracks} pistas · ${r.parsed.tempo} BPM aprox. · Duración ${formatSongTime(r.parsed.durationMs)}. Posiciones sugeridas para afinación estándar.`;
-  }else if(r.type==="guitarpro"){
-    await loadGuitarPro(r);
-  }
-  $("songWorkspace").scrollIntoView({behavior:"smooth",block:"start"});
+  try{
+    const r=id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):await songDbAction("readonly",{id});if(!r)throw new Error("No se encontró el archivo en la biblioteca local.");
+    closeSongWorkspace();$("songWorkspace").hidden=false;$("songTitle").textContent=r.name;$("songMeta").textContent=r.id.startsWith("builtin:")?"Ejercicio original incluido en Guitar Master AI":""+r.ext.toUpperCase()+" · "+prettySize(r.size)+" · guardado en este dispositivo";
+    $("audioSongPlayer").hidden=r.type!=="audio";$("midiSongPlayer").hidden=r.type!=="midi";$("gpSongPlayer").hidden=r.type!=="guitarpro";
+    if(r.type==="audio"){
+      if(!r.blob)throw new Error("El archivo de audio no está disponible en el almacenamiento local. Vuelve a importarlo.");
+      currentSongAudioUrl=URL.createObjectURL(r.blob);const audio=$("songAudio");audio.src=currentSongAudioUrl;audio.load();setAudioSongStatus("Audio cargado. Pulsa Reproducir audio.");
+    }else if(r.type==="midi"){
+      songPracticeMode=false;songPracticeNotes=[];songPracticeIndex=0;currentMidiNotes=r.parsed.notes;renderMidiNotes(currentMidiNotes);
+      $("midiSummary").textContent=`${r.parsed.notes.length} notas · ${r.parsed.tracks} pistas · ${r.parsed.tempo} BPM aprox. · Duración ${formatSongTime(r.parsed.durationMs)}. Reproducción sintetizada para escuchar las notas; posiciones sugeridas en afinación estándar.`;
+      $("midiPlaybackStatus").textContent="MIDI listo. Pulsa Reproducir MIDI para escuchar la secuencia.";
+    }else if(r.type==="guitarpro"){
+      await loadGuitarPro(r,"gpScore","gpStatus","gpPlayBtn","gpPauseBtn","gpStopBtn");
+    }
+    $("songWorkspace").scrollIntoView({behavior:"smooth",block:"start"});
+  }catch(e){console.error(e);toast("No se pudo abrir la canción: "+(e.message||"error desconocido"));}
 }
 function formatSongTime(ms){const s=Math.floor(ms/1000);return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
 function renderMidiNotes(notes){
@@ -300,86 +324,174 @@ function renderMidiNotes(notes){
   root.innerHTML=limit.map((n,i)=>`<div class="midi-note" data-midi-index="${i}"><strong>${escapeHtml(n.name)}</strong><span>${escapeHtml(n.position.string)} · Traste ${n.position.fret}</span><small>${n.position.finger} · ${formatSongTime(n.startMs)}</small></div>`).join("");
   if(notes.length>1000)root.insertAdjacentHTML("beforeend",`<p class="muted">Se muestran las primeras 1.000 de ${notes.length} notas.</p>`);
 }
-async function loadGuitarPro(record){
-  $("gpStatus").textContent="Cargando lector de tablaturas…";$("gpPlayBtn").disabled=true;$("gpStopBtn").disabled=true;$("gpScore").innerHTML="";
-  try{
-    const alphaTab=await import("https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.9.0/dist/alphaTab.min.mjs");
-    const container=$("gpScore");
-    alphaTabApi=new alphaTab.AlphaTabApi(container,{player:{enablePlayer:true,soundFont:"https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.9.0/dist/soundfont/sonivox.sf2",scrollElement:container}});
-    alphaTabApi.scoreLoaded.on(score=>{$("songMeta").textContent=`${score.title||record.name}${score.artist?" · "+score.artist:""} · ${score.tracks.length} pistas`;$("gpStatus").textContent="Tablatura cargada. Elige reproducir para escucharla."});
-    alphaTabApi.playerReady.on(()=>{$("gpPlayBtn").disabled=false;$("gpStopBtn").disabled=false;$("gpStatus").textContent="Reproductor listo"});
-    alphaTabApi.error.on(e=>{$("gpStatus").textContent="No se pudo leer este archivo: "+(e.message||"formato no reconocido")});
-    alphaTabApi.load(new Uint8Array(await record.blob.arrayBuffer()));
-    $("gpPlayBtn").onclick=()=>alphaTabApi?.playPause();$("gpStopBtn").onclick=()=>alphaTabApi?.stop();
-  }catch(e){console.error(e);$("gpStatus").textContent="No se pudo cargar el lector Guitar Pro. Verifica la conexión a internet y vuelve a abrir la canción.";toast("No se pudo abrir la tablatura Guitar Pro.")}
-}
-function stopMidiPlayback(){midiPlaybackTimers.forEach(clearTimeout);midiPlaybackTimers=[];midiPlaybackNodes.forEach(n=>{try{n.stop()}catch(e){}});midiPlaybackNodes=[];if(midiAudioContext){midiAudioContext.close().catch(()=>{});midiAudioContext=null}}
-async function playMidi(){
-  stopMidiPlayback();if(!currentMidiNotes.length)return;
-  const speed=Number($("midiSpeed").value)||1;const AC=window.AudioContext||window.webkitAudioContext;midiAudioContext=new AC();await midiAudioContext.resume();const base=midiAudioContext.currentTime+0.12;
-  currentMidiNotes.forEach((n,i)=>{
-    const start=base+n.startMs/1000/speed,duration=Math.min(2.5,n.durationMs/1000/speed),osc=midiAudioContext.createOscillator(),gain=midiAudioContext.createGain();
-    osc.type="triangle";osc.frequency.value=440*Math.pow(2,(n.pitch-69)/12);gain.gain.setValueAtTime(0.0001,start);gain.gain.exponentialRampToValueAtTime(Math.max(.025,n.velocity/127*.12),start+.015);gain.gain.setValueAtTime(Math.max(.025,n.velocity/127*.12),start+Math.max(.02,duration-.04));gain.gain.exponentialRampToValueAtTime(.0001,start+duration);osc.connect(gain);gain.connect(midiAudioContext.destination);osc.start(start);osc.stop(start+duration+.02);midiPlaybackNodes.push(osc);
-    const delay=Math.max(0,(n.startMs/speed));midiPlaybackTimers.push(setTimeout(()=>{document.querySelectorAll(".midi-note.active").forEach(el=>el.classList.remove("active"));const card=document.querySelector(`[data-midi-index="${i}"]`);if(card){card.classList.add("active");card.scrollIntoView({block:"nearest",behavior:"smooth"})}},delay));
+async function loadGuitarPro(record,targetId="gpScore",statusId="gpStatus",playId="gpPlayBtn",pauseId="gpPauseBtn",stopId="gpStopBtn"){
+  const status=$(statusId),playBtn=$(playId),pauseBtn=$(pauseId),stopBtn=$(stopId),container=$(targetId);
+  status.textContent="Cargando el motor Guitar Pro y el instrumento de audio…";playBtn.disabled=true;pauseBtn.disabled=true;stopBtn.disabled=true;container.innerHTML="";
+  if(!window.alphaTab?.AlphaTabApi){status.textContent="No se pudo cargar alphaTab. Revisa tu conexión a internet y recarga la aplicación.";throw new Error("El lector Guitar Pro no está disponible; comprueba la conexión a internet.")}
+  if(alphaTabApi){try{alphaTabApi.destroy()}catch(e){}alphaTabApi=null}
+  const base="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.9.0/dist/";
+  const api=new window.alphaTab.AlphaTabApi(container,{
+    core:{fontDirectory:base+"font/"},
+    player:{enablePlayer:true,soundFont:base+"soundfont/sonivox.sf2"}
   });
-  const total=Math.max(...currentMidiNotes.map(n=>n.startMs+n.durationMs))/speed+250;midiPlaybackTimers.push(setTimeout(stopMidiPlayback,total));
+  alphaTabApi=api;
+  let settled=false,timeoutId;
+  const ready=new Promise((resolve,reject)=>{
+    timeoutId=setTimeout(()=>{if(!settled){settled=true;reject(new Error("El motor de audio tardó demasiado. Revisa tu conexión y vuelve a abrir el archivo."))}},45000);
+    api.scoreLoaded.on(score=>{if(status)status.textContent=`Partitura cargada: ${score.title||record.name}. Preparando sonido…`;if($("songMeta")&&targetId==="gpScore")$("songMeta").textContent=`${score.title||record.name}${score.artist?" · "+score.artist:""} · ${score.tracks.length} pistas`;});
+    api.playerReady.on(()=>{if(!settled){settled=true;clearTimeout(timeoutId);resolve(api)}status.textContent="Reproductor listo. Ya puedes iniciar la canción.";playBtn.disabled=false;pauseBtn.disabled=false;stopBtn.disabled=false;});
+    api.error.on(e=>{console.error("alphaTab:",e);status.textContent="Error en el lector o motor de audio: "+(e.message||"error desconocido");if(!settled){settled=true;clearTimeout(timeoutId);reject(new Error(e.message||"Error al cargar la tablatura."))}});
+  });
+  const loaded=api.load(new Uint8Array(await record.blob.arrayBuffer()));
+  if(loaded===false)throw new Error("alphaTab no pudo iniciar la lectura de este archivo.");
+  await ready;
+  playBtn.onclick=()=>{if(!api.isReadyForPlayback){status.textContent="El motor todavía no está listo.";return}const ok=api.play();if(targetId==="duoGpScore")duoGpActive=ok;status.textContent=ok?"Reproduciendo tablatura…":"No se pudo iniciar. Pulsa reproducir nuevamente."};
+  pauseBtn.onclick=()=>{api.pause();if(targetId==="duoGpScore")duoGpActive=false;status.textContent="Reproducción pausada."};
+  stopBtn.onclick=()=>{api.stop();if(targetId==="duoGpScore")duoGpActive=false;status.textContent="Reproducción detenida."};
+  return api;
+}
+function setMidiPlaybackStatus(message){const el=$("midiPlaybackStatus");if(el)el.textContent=message}
+function stopMidiPlayback(message="Reproducción detenida."){
+  midiPlaybackTimers.forEach(clearTimeout);midiPlaybackTimers=[];midiPlaybackNodes.forEach(n=>{try{n.stop()}catch(e){}});midiPlaybackNodes=[];
+  if(midiAudioContext){midiAudioContext.close().catch(()=>{});midiAudioContext=null}
+  document.querySelectorAll(".midi-note.active").forEach(el=>el.classList.remove("active"));setMidiPlaybackStatus(message);
+}
+function schedulePluck(ctx,pitch,velocity,start,duration,container){
+  const osc=ctx.createOscillator(),sub=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
+  const freq=midiToFreq(pitch),level=Math.max(.018,Math.min(.13,(velocity||82)/127*.12));
+  osc.type="sawtooth";osc.frequency.setValueAtTime(freq,start);sub.type="triangle";sub.frequency.setValueAtTime(freq*2.003,start);
+  filter.type="lowpass";filter.frequency.setValueAtTime(Math.min(6500,Math.max(900,freq*7)),start);filter.Q.value=.7;
+  gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(level,start+.008);gain.gain.exponentialRampToValueAtTime(level*.22,start+Math.min(.16,Math.max(.04,duration*.35)));gain.gain.exponentialRampToValueAtTime(.0001,start+Math.max(.06,duration));
+  osc.connect(filter);sub.connect(filter);filter.connect(gain);gain.connect(ctx.destination);osc.start(start);sub.start(start);osc.stop(start+duration+.02);sub.stop(start+duration+.02);container.push(osc,sub);
+}
+async function playMidi(){
+  stopMidiPlayback("Preparando reproducción MIDI…");if(!currentMidiNotes.length){setMidiPlaybackStatus("No hay notas MIDI para reproducir.");return}
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC){setMidiPlaybackStatus("Este navegador no permite reproducción de audio Web.");return}
+  try{
+    const speed=Number($("midiSpeed").value)||1;midiAudioContext=new AC({latencyHint:"interactive"});await midiAudioContext.resume();
+    const base=midiAudioContext.currentTime+.16;
+    currentMidiNotes.forEach((n,i)=>{
+      const start=base+n.startMs/1000/speed,duration=Math.min(4,Math.max(.07,n.durationMs/1000/speed));
+      schedulePluck(midiAudioContext,n.pitch,n.velocity,start,duration,midiPlaybackNodes);
+      const delay=Math.max(0,n.startMs/speed);midiPlaybackTimers.push(setTimeout(()=>{document.querySelectorAll(".midi-note.active").forEach(el=>el.classList.remove("active"));const card=document.querySelector(`[data-midi-index="${i}"]`);if(card){card.classList.add("active");if(i%8===0)card.scrollIntoView({block:"nearest",behavior:"smooth"})}},delay));
+    });
+    const total=Math.max(...currentMidiNotes.map(n=>n.startMs+n.durationMs))/speed+350;setMidiPlaybackStatus("Reproduciendo MIDI · sintetizador de referencia.");midiPlaybackTimers.push(setTimeout(()=>stopMidiPlayback("Reproducción finalizada."),total));
+  }catch(e){console.error(e);stopMidiPlayback("No se pudo iniciar el audio MIDI: "+(e.message||"error"));toast("No se pudo iniciar la reproducción MIDI.")}
 }
 
-// Modo Dúo: dos capturas independientes en el mismo equipo.
-const duoPlayers=[null,null];let duoRecords=[];let duoRefreshTimer=null;let duoSharedAudio=null;let duoSharedUrl=null;
+function setAudioSongStatus(message){const el=$("songAudioStatus");if(el)el.textContent=message}
+async function playAudioSong(){
+  const audio=$("songAudio");if(!audio.src){setAudioSongStatus("Primero abre un archivo MP3 o WAV de tu biblioteca.");return}
+  try{await audio.play();setAudioSongStatus("Reproduciendo audio.")}
+  catch(e){console.error(e);setAudioSongStatus("El navegador no pudo reproducir el archivo: "+(e.message||"formato no compatible"));toast("No se pudo reproducir el audio. Verifica que sea MP3 o WAV compatible.")}
+}
+function stopAudioSong(){const audio=$("songAudio");if(audio){audio.pause();try{audio.currentTime=0}catch(e){}}}
+$("songAudioPlayBtn").addEventListener("click",playAudioSong);
+$("songAudioPracticeBtn").addEventListener("click",()=>{songPracticeMode=false;songPracticeNotes=[];songPracticeIndex=0;setExercise();playAudioSong();showView("practice");setFeedback("Practica con la pista de acompañamiento. Usa auriculares para evitar que el audio vuelva al micrófono.",false)});
+$("songAudioStopBtn").addEventListener("click",()=>{stopAudioSong();setAudioSongStatus("Audio detenido.")});
+$("songAudio").addEventListener("loadedmetadata",()=>{const a=$("songAudio");setAudioSongStatus(`Audio preparado · ${formatSongTime(a.duration*1000)} · pulsa reproducir.`)});
+$("songAudio").addEventListener("playing",()=>setAudioSongStatus("Reproduciendo audio."));
+$("songAudio").addEventListener("pause",()=>{if($("songAudio").currentTime>0)setAudioSongStatus("Audio pausado.")});
+$("songAudio").addEventListener("ended",()=>setAudioSongStatus("La canción terminó."));
+$("songAudio").addEventListener("error",()=>{const code=$("songAudio").error?.code;const descriptions={1:"carga cancelada",2:"error de lectura",3:"formato o códec no compatible",4:"formato no compatible"};setAudioSongStatus("No se pudo decodificar el audio: "+(descriptions[code]||"archivo inválido"))});
+
+// Modo Dúo local: dos entradas separadas o dos canales de una interfaz estéreo.
+const duoPlayers=[null,null];let duoRecords=[];let duoSharedAudio=null;let duoSharedUrl=null;let duoMidiCtx=null,duoMidiTimers=[],duoMidiNodes=[],duoGpActive=false;
 function duoInstrumentStrings(value){return value.includes("Bajo")?"E A D G":"E A D G B E"}
 function updateDuoInstrumentLabels(){[1,2].forEach(n=>{const instrument=$("duoInstrument"+n).value;$("duoStageInstrument"+n).textContent=instrument;$("duoFret"+n).textContent=duoInstrumentStrings(instrument)})}
 async function initDuoView(){
-  updateDuoInstrumentLabels();
-  const select=$("duoSong");if(!select.dataset.loaded){
-    try{duoRecords=await songDbAction("readonly")}catch(e){duoRecords=[]}
-    const opts=[...BUILTIN_SONGS,...duoRecords].map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio":""}</option>`).join("");
-    select.insertAdjacentHTML("beforeend",opts);select.dataset.loaded="1";
-  }
+  updateDuoInstrumentLabels();const select=$("duoSong"),previous=select.value;
+  try{duoRecords=await songDbAction("readonly")}catch(e){duoRecords=[]}
+  const opts=[...BUILTIN_SONGS,...duoRecords].map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio": " · "+r.ext.toUpperCase()}</option>`).join("");
+  select.innerHTML='<option value="">Selecciona una canción de la biblioteca</option>'+opts;
+  if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;
   await populateDuoInputs();
 }
 async function populateDuoInputs(){
-  try{const devices=await navigator.mediaDevices.enumerateDevices(),inputs=devices.filter(d=>d.kind==="audioinput");
-    [1,2].forEach(n=>{const el=$("duoInput"+n),old=el.value;el.innerHTML='<option value="">Micrófono predeterminado</option>'+inputs.map((d,i)=>`<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label||`Entrada de audio ${i+1}`)}</option>`).join("");if(old)el.value=old});
-  }catch(e){}
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices(),inputs=devices.filter(d=>d.kind==="audioinput");
+    [1,2].forEach(n=>{const el=$("duoInput"+n),old=el.value;el.innerHTML='<option value="">Entrada predeterminada</option>'+inputs.map((d,i)=>`<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label||`Entrada de audio ${i+1}`)}</option>`).join("");if(old)el.value=old});
+  }catch(e){console.warn("No se pudieron enumerar las entradas de audio",e)}
 }
 async function connectDuoPlayer(index){
   const n=index+1;if(duoPlayers[index]){toast(`El jugador ${n} ya está conectado.`);return}
   if(!navigator.mediaDevices?.getUserMedia){toast("Se necesita Chrome o Edge actualizado y HTTPS para capturar audio.");return}
+  let media=null;
   try{
-    const deviceId=$("duoInput"+n).value;
-    const constraints={audio:{...(deviceId?{deviceId:{exact:deviceId}}:{}),echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false};
-    const media=await navigator.mediaDevices.getUserMedia(constraints),AC=window.AudioContext||window.webkitAudioContext,ctx=new AC({latencyHint:"interactive"});await ctx.resume();
-    const src=ctx.createMediaStreamSource(media),an=ctx.createAnalyser();an.fftSize=8192;an.smoothingTimeConstant=0;src.connect(an);
-    const player={stream:media,ctx,src,an,raf:0,buffer:new Float32Array(an.fftSize),samples:0,good:0};duoPlayers[index]=player;
-    const tick=()=>{if(!duoPlayers[index])return;an.getFloatTimeDomainData(player.buffer);const pitch=detectPitch(player.buffer,ctx.sampleRate);
-      if(pitch){const name=midiName(pitch.midi),cents=Math.abs(noteCents(pitch.frequency,pitch.midi));$("duoNote"+n).textContent=name;$("duoPitch"+n).textContent=pitch.frequency.toFixed(1)+" Hz · "+(cents<=5?"Afinada":cents.toFixed(0)+" cents de desviación");player.samples++;if(cents<=15)player.good++;$("duoAccuracy"+n).textContent=Math.round(player.good/player.samples*100)+"%"}
-      player.raf=requestAnimationFrame(tick)};tick();
-    $("duoConnect"+n).textContent=`Jugador ${n} conectado`;$("duoConnect"+n).disabled=true;$("duoStageStatus"+n).textContent="Entrada de audio activa";$("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados";await populateDuoInputs();toast(`Audio del jugador ${n} conectado.`);
-  }catch(e){console.error(e);toast(`No se pudo conectar al jugador ${n}. Revisa permisos y entradas de audio.`)}
+    const deviceId=$("duoInput"+n).value,other=duoPlayers[1-index];let channelIndex=Number($("duoChannel"+n).value||0);
+    const sameDevice=!!other&&(other.deviceId||"")===(deviceId||"");
+    if(sameDevice&&channelIndex===other.channelIndex){channelIndex=other.channelIndex===0?1:0;$("duoChannel"+n).value=String(channelIndex);toast(`Se asignó el canal ${channelIndex+1} al jugador ${n} para separar ambas señales.`)}
+    if(other&&(other.deviceId||"")===(deviceId||"")&&other.channelIndex===channelIndex)throw new Error("Los dos jugadores no pueden usar el mismo canal de audio. Selecciona canales 1 y 2, o entradas distintas.");
+    const audio={...(deviceId?{deviceId:{exact:deviceId}}:{}),channelCount:{ideal:2},echoCancellation:false,noiseSuppression:false,autoGainControl:false};
+    media=await navigator.mediaDevices.getUserMedia({audio,video:false});
+    const track=media.getAudioTracks()[0],settings=track?.getSettings?.()||{},channelCount=settings.channelCount||1,actualDeviceId=settings.deviceId||deviceId;
+    if(other&&(other.actualDeviceId||other.deviceId||"")===(actualDeviceId||"")&&other.channelIndex===channelIndex){
+      if(channelCount>1){channelIndex=other.channelIndex===0?1:0;$("duoChannel"+n).value=String(channelIndex);toast(`La entrada corresponde al mismo dispositivo: asigné automáticamente el canal ${channelIndex+1} al jugador ${n}.`)}
+      else throw new Error("Los dos jugadores están usando el mismo dispositivo mono. Conecta una segunda entrada o usa una interfaz estéreo con canales separados.");
+    }
+    if(channelIndex>0&&channelCount<2)throw new Error("Esta entrada solo ofrece un canal mono. Para usar canal 2 necesitas una interfaz estéreo o una segunda entrada de audio independiente.");
+    const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("El navegador no dispone de AudioContext.");
+    const ctx=new AC({latencyHint:"interactive"});await ctx.resume();const src=ctx.createMediaStreamSource(media),an=ctx.createAnalyser();an.fftSize=8192;an.smoothingTimeConstant=0;
+    if(channelCount>1){const splitter=ctx.createChannelSplitter(channelCount);src.connect(splitter);splitter.connect(an,channelIndex);}
+    else src.connect(an);
+    const player={stream:media,ctx,src,an,raf:0,buffer:new Float32Array(an.fftSize),deviceId,actualDeviceId,channelIndex,channelCount,lastMidi:null,lastNoteAt:0,notes:0};duoPlayers[index]=player;
+    let lastAnalysis=0;const tick=now=>{
+      if(!duoPlayers[index])return;
+      if(now-lastAnalysis>=65){lastAnalysis=now;an.getFloatTimeDomainData(player.buffer);const pitch=detectPitch(player.buffer,ctx.sampleRate);
+        if(pitch){const cents=Math.abs(noteCents(pitch.frequency,pitch.midi));$("duoNote"+n).textContent=midiName(pitch.midi);$("duoPitch"+n).textContent=pitch.frequency.toFixed(1)+" Hz · "+(cents<=5?"Afinada":cents.toFixed(0)+" cents de desviación");if(pitch.midi!==player.lastMidi&&now-player.lastNoteAt>180){player.notes++;player.lastMidi=pitch.midi;player.lastNoteAt=now;$("duoAccuracy"+n).textContent=player.notes+" notas"}}
+        else if(now-player.lastNoteAt>800){$("duoNote"+n).textContent="—"}}
+      player.raf=requestAnimationFrame(tick);
+    };player.raf=requestAnimationFrame(tick);
+    $("duoConnect"+n).textContent=`Jugador ${n} conectado`;$("duoConnect"+n).disabled=true;$("duoStageStatus"+n).textContent=`Entrada activa · canal ${channelIndex+1}`;
+    $("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados";
+    await populateDuoInputs();toast(`Audio del jugador ${n} conectado. Canal ${channelIndex+1}.`);
+  }catch(e){if(media)media.getTracks().forEach(t=>t.stop());console.error(e);toast(`Jugador ${n}: ${e.message||"No se pudo conectar el audio."}`)}
 }
-function stopDuoPlayer(index){const n=index+1,p=duoPlayers[index];if(!p)return;cancelAnimationFrame(p.raf);p.stream.getTracks().forEach(t=>t.stop());p.ctx.close().catch(()=>{});duoPlayers[index]=null;$("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Esperando conexión";$("duoAccuracy"+n).textContent="—";$("duoConnect"+n).disabled=false;$("duoConnect"+n).textContent=`Conectar jugador ${n}`;$("duoStageStatus"+n).textContent="Sin conexión";$("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados"}
-function stopDuo(){stopDuoPlayer(0);stopDuoPlayer(1);if(duoSharedAudio){duoSharedAudio.pause();duoSharedAudio=null}if(duoSharedUrl){URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=null}$("duoSessionStatus").textContent="Sesión detenida";toast("Sesión de dúo detenida.")}
+function stopDuoPlayer(index){
+  const n=index+1,p=duoPlayers[index];if(!p)return;cancelAnimationFrame(p.raf);p.stream.getTracks().forEach(t=>t.stop());p.ctx.close().catch(()=>{});duoPlayers[index]=null;
+  $("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Esperando conexión";$("duoAccuracy"+n).textContent="—";$("duoConnect"+n).disabled=false;$("duoConnect"+n).textContent=`Conectar jugador ${n}`;$("duoStageStatus"+n).textContent="Sin conexión";$("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados";
+}
+function stopDuoMidi(){duoMidiTimers.forEach(clearTimeout);duoMidiTimers=[];duoMidiNodes.forEach(n=>{try{n.stop()}catch(e){}});duoMidiNodes=[];if(duoMidiCtx){duoMidiCtx.close().catch(()=>{});duoMidiCtx=null}}
+function stopDuo(){
+  stopDuoPlayer(0);stopDuoPlayer(1);if(duoSharedAudio){duoSharedAudio.pause();duoSharedAudio.src="";duoSharedAudio=null}if(duoSharedUrl){URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=null}
+  stopDuoMidi();if(duoGpActive&&alphaTabApi){try{alphaTabApi.stop()}catch(e){}duoGpActive=false;}
+  $("duoGpPlayer").hidden=true;$("duoSessionStatus").textContent="Sesión detenida";toast("Sesión de dúo detenida.");
+}
 async function startDuo(){
-  if($("duoConnection").value==="remote"){toast("El modo entre dos dispositivos requiere habilitar un servidor de señalización para sincronizar audio y partida. La configuración está preparada, pero esta conexión aún no está activa.");return}
+  if($("duoConnection").value==="remote"){toast("La conexión entre dos dispositivos necesita configurar un servidor de emparejamiento. No está habilitada todavía.");return}
   const id=$("duoSong").value;if(!id){toast("Selecciona una canción para los dos jugadores.");return}
-  if(!duoPlayers[0]||!duoPlayers[1]){toast("Conecta las dos entradas de audio antes de iniciar.");return}
-  const song=id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):await songDbAction("readonly",{id});if(!song){toast("No se encontró la canción seleccionada.");return}
-  $("duoStageSong").textContent=song.name;$("duoStageStatus1").textContent="Tocando · entrada activa";$("duoStageStatus2").textContent="Tocando · entrada activa";
-  if(song.type==="audio"&&song.blob){if(duoSharedUrl)URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=URL.createObjectURL(song.blob);duoSharedAudio=new Audio(duoSharedUrl);duoSharedAudio.onended=()=>{$("duoSessionStatus").textContent="Canción finalizada · entradas aún activas"};try{await duoSharedAudio.play()}catch(e){toast("El navegador bloqueó la reproducción. Pulsa iniciar otra vez.");return}}
-  else if(song.type==="midi"&&song.parsed?.notes?.length){playDuoMidi(song.parsed.notes)}
-  else if(song.type==="guitarpro"){toast("La tablatura Guitar Pro está disponible en la biblioteca; la reproducción sincronizada dentro del modo Dúo se añadirá en la siguiente integración.")}
-  $("duoSessionStatus").textContent="Sesión activa · misma canción para ambos";toast("¡Modo Dúo iniciado!");
+  if(!duoPlayers[0]||!duoPlayers[1]){toast("Conecta el audio de los dos jugadores antes de iniciar la canción.");return}
+  if(duoPlayers[0].stream===duoPlayers[1].stream||(duoPlayers[0].actualDeviceId||duoPlayers[0].deviceId||"")===(duoPlayers[1].actualDeviceId||duoPlayers[1].deviceId||"")&&duoPlayers[0].channelIndex===duoPlayers[1].channelIndex){toast("Las entradas de los jugadores no están separadas. Usa dos entradas o los canales 1 y 2 de una interfaz estéreo.");return}
+  const song=id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):duoRecords.find(x=>x.id===id);if(!song){toast("No se encontró la canción seleccionada. Vuelve a abrir el modo Dúo para actualizar la biblioteca.");return}
+  try{
+    $("duoStageSong").textContent=song.name;$("duoStageStatus1").textContent="Entrada activa";$("duoStageStatus2").textContent="Entrada activa";$("duoGpPlayer").hidden=true;
+    if(duoSharedAudio){duoSharedAudio.pause();duoSharedAudio=null}if(duoSharedUrl){URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=null}stopDuoMidi();
+    if(song.type==="audio"){
+      if(!song.blob)throw new Error("El archivo de audio no está guardado. Vuelve a importarlo.");
+      duoSharedUrl=URL.createObjectURL(song.blob);duoSharedAudio=new Audio();duoSharedAudio.src=duoSharedUrl;duoSharedAudio.preload="auto";duoSharedAudio.onended=()=>{$("duoSessionStatus").textContent="Canción finalizada · entradas aún activas"};duoSharedAudio.onerror=()=>{$("duoSessionStatus").textContent="No se pudo decodificar el audio elegido"};await duoSharedAudio.play();
+    }else if(song.type==="midi"&&song.parsed?.notes?.length){await playDuoMidi(song.parsed.notes)}
+    else if(song.type==="guitarpro"){
+      $("duoGpPlayer").hidden=false;const api=await loadGuitarPro(song,"duoGpScore","duoGpStatus","duoGpPlayBtn","duoGpPauseBtn","duoGpStopBtn");
+      if(!api.isReadyForPlayback)throw new Error("La tablatura cargó, pero el motor de audio aún no está listo.");
+      duoGpActive=false;$("duoGpStatus").textContent="Partitura lista. Pulsa «Reproducir partitura» para iniciar el sonido.";
+      $("duoSessionStatus").textContent="Partitura lista · esperando que inicies la reproducción";toast("Partitura preparada. Pulsa Reproducir partitura en el panel Dúo.");return;
+    }else throw new Error("Este formato todavía no se puede reproducir en modo Dúo.");
+    $("duoSessionStatus").textContent="Sesión activa · misma canción para ambos";toast("¡Reproducción compartida iniciada!");
+  }catch(e){console.error(e);$("duoSessionStatus").textContent="No se pudo iniciar la canción";toast("No arrancó la canción: "+(e.message||"error desconocido"))}
 }
-let duoMidiCtx=null,duoMidiTimers=[];
-async function playDuoMidi(notes){duoMidiTimers.forEach(clearTimeout);duoMidiTimers=[];if(duoMidiCtx)duoMidiCtx.close().catch(()=>{});const AC=window.AudioContext||window.webkitAudioContext;duoMidiCtx=new AC();const ctx=duoMidiCtx;await ctx.resume();const base=ctx.currentTime+.15;notes.forEach(n=>{const start=base+n.startMs/1000,osc=ctx.createOscillator(),gain=ctx.createGain();osc.type="triangle";osc.frequency.value=midiToFreq(n.pitch);gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(.07,start+.02);gain.gain.setValueAtTime(.07,start+Math.max(.03,n.durationMs/1000-.04));gain.gain.exponentialRampToValueAtTime(.0001,start+n.durationMs/1000);osc.connect(gain);gain.connect(ctx.destination);osc.start(start);osc.stop(start+n.durationMs/1000+.03)});const end=Math.max(...notes.map(n=>n.startMs+n.durationMs));duoMidiTimers.push(setTimeout(()=>{$("duoSessionStatus").textContent="MIDI finalizado · entradas aún activas"},end+250))}
+async function playDuoMidi(notes){
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("El navegador no admite reproducción MIDI.");
+  duoMidiCtx=new AC({latencyHint:"interactive"});const ctx=duoMidiCtx;await ctx.resume();const base=ctx.currentTime+.16;
+  notes.forEach(n=>{const start=base+n.startMs/1000,duration=Math.min(4,Math.max(.07,n.durationMs/1000));schedulePluck(ctx,n.pitch,n.velocity,start,duration,duoMidiNodes)});
+  const end=Math.max(...notes.map(n=>n.startMs+n.durationMs));duoMidiTimers.push(setTimeout(()=>{$("duoSessionStatus").textContent="MIDI finalizado · entradas aún activas";stopDuoMidi()},end+350));
+}
 $("duoConnect1").addEventListener("click",()=>connectDuoPlayer(0));$("duoConnect2").addEventListener("click",()=>connectDuoPlayer(1));$("duoStopBtn").addEventListener("click",stopDuo);$("duoStartBtn").addEventListener("click",startDuo);
 [1,2].forEach(n=>$("duoInstrument"+n).addEventListener("change",updateDuoInstrumentLabels));
-$("duoConnection").addEventListener("change",e=>{const remote=e.target.value==="remote";$("duoConnectionNote").textContent=remote?"La modalidad remota necesita un servicio de señalización y sincronización entre dispositivos. Esta interfaz queda preparada; no se puede emparejar todavía desde GitHub Pages sin ese servicio.":"Conecta dos instrumentos mediante dos entradas de audio USB independientes. La disponibilidad depende de tu sistema y navegador.";$("duoPlayerGrid").classList.toggle("remote-preview",remote)});
+$("duoConnection").addEventListener("change",e=>{const remote=e.target.value==="remote";$("duoConnectionNote").textContent=remote?"La modalidad entre dos dispositivos todavía necesita un servidor de emparejamiento. Usa el modo local para esta versión.":"Conecta dos entradas de audio distintas, o selecciona una interfaz estéreo y asigna canal 1 al jugador 1 y canal 2 al jugador 2.";$("duoPlayerGrid").classList.toggle("remote-preview",remote)});
 
 $("songFiles").addEventListener("change",e=>{if(e.target.files?.length)importSongFiles([...e.target.files]);e.target.value=""});
 $("songLibrary").addEventListener("click",async e=>{const open=e.target.closest("[data-open-song]"),del=e.target.closest("[data-delete-song]");if(open)await openSong(open.dataset.openSong);if(del){if(confirm("¿Eliminar esta canción de tu biblioteca local?")){await songDbAction("readwrite",{id:del.dataset.deleteSong,delete:true});await renderSongLibrary();closeSongWorkspace();toast("Canción eliminada del dispositivo.")}}});
-$("closeSongBtn").addEventListener("click",closeSongWorkspace);$("midiPlayBtn").addEventListener("click",playMidi);$("midiStopBtn").addEventListener("click",stopMidiPlayback);
+$("closeSongBtn").addEventListener("click",closeSongWorkspace);$("midiPlayBtn").addEventListener("click",playMidi);$("midiStopBtn").addEventListener("click",()=>stopMidiPlayback("Reproducción detenida."));
 $("midiPracticeBtn").addEventListener("click",()=>{if(!currentMidiNotes.length)return;songPracticeMode=true;songPracticeNotes=currentMidiNotes;songPracticeIndex=0;setExercise();showView("practice");setFeedback("Toca la primera nota de la canción",false);toast("Modo práctica de canción activado. Conecta el audio para evaluar tus notas.")});
 renderSongLibrary().catch(e=>{console.warn(e);$("songLibrary").innerHTML='<p class="empty-library">El navegador no permitió crear la biblioteca local. Usa una versión actualizada de Chrome o Edge.</p>'});
 

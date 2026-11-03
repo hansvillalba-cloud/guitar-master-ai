@@ -1,74 +1,70 @@
-# Guitar Master AI V1.3
+# Guitar Master AI V1.4
 
-Aplicación web progresiva (PWA) para aprender guitarra en Windows y Android, publicable en GitHub Pages.
+Aplicación web progresiva (PWA) en español para Windows y Android, preparada para publicarse en GitHub Pages.
+
+## Correcciones principales de V1.4
+
+- Reproductor MP3/WAV con botones visibles de reproducir y detener, estados de carga/reproducción y mensajes de error del decodificador del navegador.
+- Reproducción MIDI con inicio explícito, parada, resaltado de notas y una síntesis electrónica de referencia. No es una grabación real de guitarra.
+- Lector Guitar Pro actualizado a alphaTab 1.9.0 mediante el bundle UMD oficial de CDN, con worker/worklet y directorio de fuentes asociados al script. Los botones de reproducción solo se habilitan cuando alphaTab confirma que el motor de audio está listo.
+- El modo Dúo puede reproducir MIDI, MP3/WAV y Guitar Pro en una sesión local compartida.
+- Dúo local admite dos entradas de audio distintas o dos canales independientes de una interfaz estéreo. Si ambos jugadores eligen el mismo dispositivo, la aplicación intenta separar canal 1 y canal 2; si el dispositivo solo ofrece mono, muestra un error explicativo.
+- Frecuencia mínima de detección ampliada para incluir notas graves de bajo.
+- La práctica desde MIDI avanza automáticamente a la siguiente nota al reconocer correctamente la nota objetivo.
+- El service worker ya no intercepta recursos externos del CDN ni sustituye archivos JavaScript externos por `index.html` cuando falla una descarga.
 
 ## Funciones
-- Interfaz en español con diseño neón azul y naranja.
-- Captura de audio por micrófono o interfaz USB compatible con el navegador.
-- Afinador cromático monofónico.
-- Modo práctica con detección de nota, puntuación y guía de cuerda/traste/dedo.
-- Diapasón interactivo de seis cuerdas y doce trastes.
-- Lecciones iniciales.
-- **Biblioteca Guitar Master:** tres ejercicios originales incluidos para practicar riffs de rock, hard rock y metal.
-- **Práctica con MIDI:** envía las notas importadas al modo práctica para que la app indique la siguiente nota, cuerda, traste y dedo sugerido mientras escucha la guitarra.
-- **Biblioteca personal local:** importa archivos desde el dispositivo, abre y elimina canciones, sin subirlas a un servidor.
-- **Guitar Pro:** lector de `.gp3`, `.gp4`, `.gp5`, `.gpx` y `.gp` mediante alphaTab. Muestra la partitura/tablatura y permite reproducirla con el sintetizador.
-- **MIDI:** importa `.mid` y `.midi`, interpreta las notas, su duración y tiempo; propone cuerda, traste y dedo orientativo. Incluye reproducción de referencia sintetizada.
-- **Audio:** importa `.mp3` y `.wav` como pista de acompañamiento con reproductor del navegador.
-- Biblioteca personal persistida en IndexedDB en el dispositivo.
-- Estadísticas locales y service worker para caché de la aplicación.
-- Instalable como PWA desde navegadores compatibles.
 
-## Importación y límites
-- Tamaño recomendado máximo por archivo: 40 MB.
-- Guitar Pro usa alphaTab 1.9.0 desde jsDelivr. La primera lectura de tablaturas y la descarga del SoundFont requieren conexión a internet. La biblioteca de ejercicios, la importación MIDI y la reproducción de MP3/WAV no dependen de ese lector externo.
-- alphaTab admite Guitar Pro 3 a 8, incluidos GPX, GP3, GP4 y GP5. Los archivos GPX/GP antiguos pueden variar según versión o contenido; si un archivo está dañado o usa una función no compatible, se mostrará un error.
-- El importador MIDI lee eventos de nota y tempo. La posición de guitarra se calcula como sugerencia para afinación estándar; no equivale a una digitación profesional verificada y no conserva necesariamente la digitación de un archivo original.
-- La reproducción MIDI de esta versión es una referencia electrónica sencilla, no un sonido realista de amplificador o guitarra.
-- MP3/WAV se reproducen como acompañamiento. No se transcriben automáticamente a tablatura: separar y reconocer la guitarra dentro de una mezcla completa requiere un motor de análisis de audio más avanzado.
-- Los archivos se guardan en IndexedDB del navegador/dispositivo. No se sincronizan entre Windows y Android y no se publican en GitHub. Borrar datos del sitio o del navegador puede borrar esta biblioteca; conserva copias de tus archivos originales.
-- El modo de escucha actual reconoce principalmente notas individuales, no acordes polifónicos completos.
+- Interfaz neón azul y naranja.
+- Afinador cromático monofónico.
+- Modo práctica con indicación de nota, cuerda, traste y dedo sugerido.
+- Diapasón interactivo y lecciones básicas.
+- Biblioteca con ejercicios originales de rock, hard rock y metal.
+- Importación local de Guitar Pro (`.gp3`, `.gp4`, `.gp5`, `.gpx`, `.gp`), MIDI (`.mid`, `.midi`), MP3 y WAV.
+- Almacenamiento de archivos en IndexedDB en el dispositivo, no en GitHub.
+- Modo Dúo local: pantalla adaptable y detección de tono por entrada/canal para cada músico.
+
+## Límites importantes (leer antes de probar)
+
+- **MP3/WAV:** se reproducen como pista de acompañamiento. La app no extrae automáticamente la guitarra ni transforma una mezcla comercial en tablatura. Pulsa «Abrir» en la biblioteca y después «Reproducir audio».
+- **MIDI:** se interpretan sus eventos de nota y tempo, se sugieren posiciones de guitarra y se reproduce una referencia sintetizada. El timbre es electrónico y no equivale a un amplificador o una guitarra grabada.
+- **Guitar Pro:** el lector utiliza alphaTab 1.9.0 desde jsDelivr y necesita conexión a internet para descargar el lector, sus recursos y el SoundFont. La partitura cargada y el reproductor listo son estados distintos; el botón se habilita cuando el motor de audio está preparado. alphaTab admite Guitar Pro 3–8. Documentación: https://docs.alphatab.net/ .
+- **Modo Dúo local:** ambos jugadores deben tener señales separadas. Se puede usar una interfaz por jugador, o una interfaz estéreo con canal 1 para el jugador 1 y canal 2 para el jugador 2. Dos micrófonos que capten la misma mezcla no permiten evaluar a cada persona por separado. Se recomienda usar audífonos para evitar que el sonido de los parlantes entre por los micrófonos.
+- **Modo Dúo remoto:** dos dispositivos diferentes todavía no pueden emparejarse. Esa función requiere un servicio en línea para crear salas y sincronizar los dispositivos; GitHub Pages por sí solo solo aloja los archivos estáticos. El selector remoto aparece deshabilitado para no ofrecer una función que todavía no existe.
+- La detección de audio es principalmente monofónica. No reconoce acordes completos ni separa instrumentos dentro de una mezcla. En Dúo se muestra la nota detectada y un recuento, no una puntuación rítmica de interpretación validada.
+- Los archivos se almacenan localmente en el navegador. No se sincronizan entre Windows y Android; borrar los datos del sitio puede borrar la biblioteca.
+- Límite de importación: 100 MB por archivo, sujeto a la cuota de almacenamiento que permita el navegador.
 
 ## Requisitos
-- Chrome o Edge actualizado en Windows; Chrome en Android.
-- HTTPS o localhost para usar el micrófono. GitHub Pages sirve HTTPS.
-- Conexión a internet para cargar el lector Guitar Pro y su SoundFont.
 
-## Ejecutar localmente en Windows
+- Chrome o Edge actualizado en Windows; Chrome actualizado en Android.
+- HTTPS o `localhost` para usar micrófono/interfaz de audio. GitHub Pages utiliza HTTPS.
+- Permisos de micrófono habilitados.
+- Conexión a internet para el lector y reproducción Guitar Pro.
+
+## Probar localmente en Windows
+
 1. Extrae el ZIP.
-2. Abre una terminal dentro de la carpeta del proyecto.
+2. Abre PowerShell o Terminal dentro de la carpeta que contiene `index.html`.
 3. Ejecuta `py -m http.server 8000` (o `python -m http.server 8000`).
 4. Abre `http://localhost:8000` en Chrome o Edge.
 
-## Publicar en GitHub Pages
-1. Crea un repositorio, por ejemplo `guitar-master-ai`.
-2. Descomprime el ZIP y sube **todo el contenido** a la raíz del repositorio: `index.html`, `app.js`, `styles.css`, `sw.js`, `manifest.webmanifest`, `.nojekyll` y `assets/`.
-3. En **Settings → Pages**, elige **Deploy from a branch**, rama `main` y carpeta `/ (root)`.
-4. Guarda y abre la URL HTTPS que GitHub Pages publique.
-5. En Windows y Android, abre la misma URL. En Android puedes usar **Añadir a pantalla de inicio**.
+## Publicar/actualizar GitHub Pages
 
-## Componentes de terceros
+1. Extrae el ZIP.
+2. Sube el **contenido** de la carpeta a la raíz del repositorio: `index.html`, `app.js`, `styles.css`, `sw.js`, `manifest.webmanifest`, `.nojekyll`, `README.md`, `THIRD_PARTY_NOTICES.md` y `assets/`.
+3. Acepta el reemplazo de los archivos anteriores y haz commit en la rama `main`.
+4. En **Settings → Pages**, comprueba que la publicación use `main` y `/ (root)`.
+5. Abre la URL de GitHub Pages y fuerza una recarga completa (`Ctrl + F5`). Si la app estaba instalada como PWA y sigue mostrando la versión anterior, cierra las pestañas de la app, vuelve a abrir la URL y espera a que el service worker nuevo tome el control.
 
-El lector Guitar Pro usa alphaTab 1.9.0 bajo licencia MPL-2.0. Consulta `THIRD_PARTY_NOTICES.md` para los avisos y enlaces del proyecto.
+## Prueba funcional después de publicar
 
-## Privacidad y almacenamiento
-Las canciones importadas se procesan localmente y se guardan en IndexedDB. No se envían a GitHub ni a un servidor de Guitar Master AI. No subas a un repositorio público canciones comerciales, tablaturas protegidas u obras sobre las que no tengas derechos.
+1. **MP3/WAV:** importa un archivo pequeño que sepas que funciona, pulsa «Abrir» en la fila de biblioteca y luego «Reproducir audio». Confirma que el tiempo del reproductor avanza. Si no, revisa el mensaje de error que aparece debajo de los controles.
+2. **MIDI:** importa un `.mid`, pulsa «Abrir» y «Reproducir MIDI». Debes oír la secuencia sintetizada y ver las notas resaltadas.
+3. **Guitar Pro:** abre un `.gp5` conocido. Espera el estado «Reproductor listo» y después pulsa «Reproducir tablatura». Este paso requiere internet.
+4. **Dúo:** entra en Modo dos jugadores, selecciona una canción, conecta primero el jugador 1 y luego el 2. Usa dos entradas físicas distintas o el canal 1 y canal 2 de una interfaz estéreo. Comprueba que cada panel muestre notas al tocar cada instrumento por separado y pulsa «Iniciar sesión compartida».
+5. Prueba en Chrome de escritorio y vuelve a probar el modo adaptable en Android.
 
-## Próximas mejoras recomendadas
-1. Sincronizar el cursor de la tablatura con la detección de la guitarra en tiempo real.
-2. Editor de digitación y selección de pistas/instrumentos.
-3. Reconocimiento polifónico y extracción de guitarra desde MP3/WAV.
-4. Calibración de latencia y modo de práctica con secciones en bucle.
-5. Sincronización opcional en la nube y empaquetado nativo para Windows/Android.
+## Privacidad y licencias
 
-
-## Modo Dúo (V1.3)
-
-- Dos jugadores en una misma canción, con pantalla adaptable (dos columnas en escritorio y jugadores apilados en móvil).
-- Cada jugador puede elegir guitarra eléctrica, acústica, clásica o bajo eléctrico.
-- En un mismo computador, cada jugador puede seleccionar una entrada de audio distinta; el navegador debe permitir dos capturas simultáneas y el sistema debe exponer ambas entradas.
-- La detección de tono y la métrica de afinación se muestran de forma independiente para cada entrada. La métrica indica afinación de la nota detectada, no validación de la parte musical exacta.
-- Las pistas MP3/WAV seleccionadas se reproducen como acompañamiento compartido y las canciones MIDI se reproducen con un sintetizador sencillo. La reproducción sincronizada de partituras Guitar Pro dentro del modo Dúo está pendiente.
-- El selector «Dos dispositivos» es una interfaz preparada, pero la conexión remota real requiere un servicio de señalización/sincronización (por ejemplo, backend WebSocket/WebRTC); GitHub Pages por sí solo no lo proporciona. No está habilitada todavía.
-
-Para probar el modo Dúo, publica la carpeta completa en GitHub Pages (HTTPS), abre «Modo dos jugadores», selecciona una canción, asigna entradas distintas a cada jugador y conecta ambos.
+Los archivos de audio y tablatura se procesan y almacenan en el navegador del usuario. No se suben automáticamente a GitHub ni a un servidor Guitar Master AI. No publiques canciones comerciales o tablaturas protegidas en un repositorio público si no tienes derechos para compartirlas. El lector Guitar Pro usa alphaTab bajo licencia MPL-2.0; consulta `THIRD_PARTY_NOTICES.md`.

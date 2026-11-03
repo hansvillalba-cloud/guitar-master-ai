@@ -115,20 +115,22 @@
         <div class="panel duo-setup">
           <div class="panel-title"><div><p class="eyebrow">CONFIGURACIÓN DE PARTIDA</p><h3>Prepara la sesión</h3></div><span class="tag">SINCRONIZACIÓN COMPARTIDA</span></div>
           <div class="duo-config-grid">
-            <label class="field-label">Conexión<select id="duoConnection"><option value="local">Un computador · dos entradas de audio</option><option value="remote">Dos dispositivos · sesión en línea</option></select></label>
+            <label class="field-label">Conexión<select id="duoConnection"><option value="local">Un computador · dos entradas de audio</option><option value="remote" disabled>Dos dispositivos · requiere servidor (pendiente)</option></select></label>
             <label class="field-label">Canción para ambos<select id="duoSong"><option value="">Selecciona una canción de la biblioteca</option></select></label>
           </div>
-          <p class="muted duo-note" id="duoConnectionNote">Conecta dos instrumentos mediante dos entradas de audio USB independientes. La disponibilidad depende de tu sistema y navegador.</p>
+          <p class="muted duo-note" id="duoConnectionNote">Conecta dos entradas físicas distintas o una interfaz estéreo: canal 1 para jugador 1 y canal 2 para jugador 2. Usa audífonos para evitar que el sonido se cuele en ambos micrófonos.</p>
           <div class="duo-player-grid" id="duoPlayerGrid">
             <article class="duo-player player-one"><div class="duo-player-head"><span class="player-number">JUGADOR 1</span><span class="player-dot"></span></div>
               <label class="field-label">Instrumento<select id="duoInstrument1"><option>Guitarra eléctrica</option><option>Guitarra acústica</option><option>Bajo eléctrico</option><option>Guitarra clásica</option></select></label>
               <label class="field-label">Entrada de audio<select id="duoInput1"><option value="">Micrófono predeterminado</option></select></label>
-              <div class="duo-readout"><small>NOTA DETECTADA</small><strong id="duoNote1">—</strong><span id="duoPitch1">Esperando conexión</span></div><div class="duo-player-stats"><span>Precisión de tono</span><strong id="duoAccuracy1">—</strong></div><button class="btn btn-primary full" id="duoConnect1">Conectar jugador 1</button>
+              <label class="field-label">Canal de entrada<select id="duoChannel1"><option value="0">Canal 1 (izquierdo / mono)</option><option value="1">Canal 2 (derecho)</option></select></label>
+              <div class="duo-readout"><small>NOTA DETECTADA</small><strong id="duoNote1">—</strong><span id="duoPitch1">Esperando conexión</span></div><div class="duo-player-stats"><span>Notas detectadas</span><strong id="duoAccuracy1">—</strong></div><button class="btn btn-primary full" id="duoConnect1">Conectar jugador 1</button>
             </article>
             <article class="duo-player player-two"><div class="duo-player-head"><span class="player-number">JUGADOR 2</span><span class="player-dot"></span></div>
               <label class="field-label">Instrumento<select id="duoInstrument2"><option>Guitarra eléctrica</option><option>Guitarra acústica</option><option selected>Bajo eléctrico</option><option>Guitarra clásica</option></select></label>
               <label class="field-label">Entrada de audio<select id="duoInput2"><option value="">Micrófono predeterminado</option></select></label>
-              <div class="duo-readout"><small>NOTA DETECTADA</small><strong id="duoNote2">—</strong><span id="duoPitch2">Esperando conexión</span></div><div class="duo-player-stats"><span>Precisión de tono</span><strong id="duoAccuracy2">—</strong></div><button class="btn btn-primary full" id="duoConnect2">Conectar jugador 2</button>
+              <label class="field-label">Canal de entrada<select id="duoChannel2"><option value="0">Canal 1 (izquierdo / mono)</option><option value="1">Canal 2 (derecho)</option></select></label>
+              <div class="duo-readout"><small>NOTA DETECTADA</small><strong id="duoNote2">—</strong><span id="duoPitch2">Esperando conexión</span></div><div class="duo-player-stats"><span>Notas detectadas</span><strong id="duoAccuracy2">—</strong></div><button class="btn btn-primary full" id="duoConnect2">Conectar jugador 2</button>
             </article>
           </div>
           <div class="duo-actions"><button class="btn btn-primary" id="duoStartBtn">▶ Iniciar sesión compartida</button><button class="btn btn-secondary" id="duoStopBtn">Detener ambos</button><span id="duoSessionStatus" class="muted">0 de 2 jugadores conectados</span></div>
@@ -136,7 +138,8 @@
         <div class="duo-stage" id="duoStage"><div class="duo-stage-head"><div><p class="eyebrow">PANTALLA DIVIDIDA ADAPTABLE</p><h3 id="duoStageSong">Selecciona una canción para comenzar</h3></div><span class="tag">JUGADORES 1 + 2</span></div>
           <div class="duo-stage-grid"><div class="duo-stage-player stage-one"><span>JUGADOR 1</span><strong id="duoStageInstrument1">Guitarra eléctrica</strong><div class="duo-fret-preview" id="duoFret1">E A D G B E</div><small id="duoStageStatus1">Sin conexión</small></div>
             <div class="duo-stage-player stage-two"><span>JUGADOR 2</span><strong id="duoStageInstrument2">Bajo eléctrico</strong><div class="duo-fret-preview" id="duoFret2">E A D G</div><small id="duoStageStatus2">Sin conexión</small></div></div>
-          <p class="hint">La pantalla se adapta automáticamente: dos columnas en pantallas amplias y jugadores apilados en móviles.</p></div>
+          <div id="duoGpPlayer" class="duo-gp-player" hidden><div class="song-controls"><button class="btn btn-primary btn-small" id="duoGpPlayBtn">▶ Reproducir partitura</button><button class="btn btn-secondary btn-small" id="duoGpPauseBtn">Ⅱ Pausar</button><button class="btn btn-secondary btn-small" id="duoGpStopBtn">■ Detener</button><span class="muted" id="duoGpStatus">Preparando reproducción…</span></div><div id="duoGpScore" class="gp-score"></div></div>
+          <p class="hint">La pantalla se adapta automáticamente: dos columnas en pantallas amplias y jugadores apilados en móviles. Para dos instrumentos en una sola interfaz, usa canales separados (1 y 2); para dos interfaces, selecciona una distinta para cada jugador.</p></div>
       </section>
 
       <section id="view-songs" class="view">
@@ -147,15 +150,19 @@
             <p class="muted">Selecciona uno o varios archivos desde tu computador o celular.</p>
             <label class="upload-zone" for="songFiles"><span class="upload-symbol">＋</span><strong>Seleccionar archivos</strong><small>GP3 · GP4 · GP5 · GPX · GP · MIDI · MP3 · WAV</small><input id="songFiles" type="file" multiple accept=".gp3,.gp4,.gp5,.gpx,.gp,.mid,.midi,.mp3,.wav,audio/mpeg,audio/wav,audio/x-wav"></label>
             <div class="format-help"><div><b>Guitar Pro</b><span>Tablatura, compases, notas y digitación que incluya el archivo.</span></div><div><b>MIDI</b><span>Convierte notas en posiciones sugeridas de cuerda y traste.</span></div><div><b>MP3 / WAV</b><span>Reproduce la canción como pista de acompañamiento.</span></div></div>
-            <p class="hint">Límite recomendado: 40 MB por archivo. No se envían a GitHub ni a un servidor.</p>
+            <p class="hint">Límite: 100 MB por archivo, sujeto al espacio disponible del navegador. No se envían a GitHub ni a un servidor.</p>
           </div>
           <div class="panel library-panel"><div class="panel-title"><div><p class="eyebrow">COLECCIÓN PERSONAL</p><h3>Mis canciones</h3></div><span class="tag" id="songCount">0 ARCHIVOS</span></div><div id="songLibrary" class="song-library"><p class="empty-library">Todavía no has agregado canciones. Importa tu primer archivo para comenzar.</p></div></div>
         </div>
         <div class="panel song-workspace" id="songWorkspace" hidden>
           <div class="panel-title"><div><p class="eyebrow">REPRODUCTOR / ENTRENAMIENTO</p><h3 id="songTitle">Canción seleccionada</h3><p class="muted" id="songMeta"></p></div><button class="btn btn-ghost btn-small" id="closeSongBtn">Cerrar ×</button></div>
-          <div id="audioSongPlayer" hidden><audio id="songAudio" controls preload="metadata"></audio><p class="muted">Pista de acompañamiento. La detección automática de notas sobre una mezcla completa no está activa todavía.</p></div>
-          <div id="midiSongPlayer" hidden><div class="song-controls"><button class="btn btn-primary btn-small" id="midiPlayBtn">▶ Reproducir MIDI</button><button class="btn btn-secondary btn-small" id="midiStopBtn">■ Detener</button><button class="btn btn-secondary btn-small" id="midiPracticeBtn">🎸 Practicar con mi guitarra</button><label>Velocidad <select id="midiSpeed"><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></label></div><div class="midi-summary" id="midiSummary"></div><div class="midi-note-list" id="midiNotes"></div></div>
-          <div id="gpSongPlayer" hidden><div class="song-controls"><button class="btn btn-primary btn-small" id="gpPlayBtn" disabled>▶ Reproducir tablatura</button><button class="btn btn-secondary btn-small" id="gpStopBtn" disabled>■ Detener</button><span class="muted" id="gpStatus">Preparando lector Guitar Pro…</span></div><div id="gpScore" class="gp-score"></div></div>
+          <div id="audioSongPlayer" hidden>
+            <div class="song-controls"><button class="btn btn-primary btn-small" id="songAudioPlayBtn">▶ Reproducir audio</button><button class="btn btn-secondary btn-small" id="songAudioStopBtn">■ Detener</button><button class="btn btn-secondary btn-small" id="songAudioPracticeBtn">🎸 Practicar encima</button><span class="muted" id="songAudioStatus" role="status">Archivo cargado. Pulsa reproducir.</span></div>
+            <audio id="songAudio" controls preload="metadata" playsinline></audio>
+            <p class="muted">Pista de acompañamiento. El archivo se reproduce desde este dispositivo; no se convierte automáticamente en tablatura ni se separan sus instrumentos.</p>
+          </div>
+          <div id="midiSongPlayer" hidden><div class="song-controls"><button class="btn btn-primary btn-small" id="midiPlayBtn">▶ Reproducir MIDI</button><button class="btn btn-secondary btn-small" id="midiStopBtn">■ Detener</button><button class="btn btn-secondary btn-small" id="midiPracticeBtn">🎸 Practicar con mi guitarra</button><label>Velocidad <select id="midiSpeed"><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option></select></label><span class="muted" id="midiPlaybackStatus" role="status">MIDI listo para reproducir.</span></div><div class="midi-summary" id="midiSummary"></div><div class="midi-note-list" id="midiNotes"></div></div>
+          <div id="gpSongPlayer" hidden><div class="song-controls"><button class="btn btn-primary btn-small" id="gpPlayBtn" disabled>▶ Reproducir tablatura</button><button class="btn btn-secondary btn-small" id="gpPauseBtn" disabled>Ⅱ Pausar</button><button class="btn btn-secondary btn-small" id="gpStopBtn" disabled>■ Detener</button><span class="muted" id="gpStatus" role="status">Preparando lector y motor de audio…</span></div><div id="gpScore" class="gp-score"></div></div>
         </div>
       </section>
 
@@ -164,9 +171,10 @@
         <div class="lesson-list" id="lessonList"></div>
       </section>
     </main>
-    <footer><span>GUITAR MASTER AI <b>V1.3</b></span><span>Hecho para aprender tocando · Audio procesado localmente</span></footer>
+    <footer><span>GUITAR MASTER AI <b>V1.4</b></span><span>Hecho para aprender tocando · Audio procesado localmente</span></footer>
   </div>
   <div id="toast" class="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.9.0/dist/alphaTab.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
