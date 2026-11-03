@@ -400,7 +400,7 @@ $("songAudio").addEventListener("error",()=>{const code=$("songAudio").error?.co
 // ===================== ROCK ENGINE V1.5 · MODO DÚO =====================
 const duoPlayers=[null,null];
 let duoRecords=[], gameChart=null, gameGpApi=null, gameGpScore=null, gameGpTracks=[];
-let gamePlayerNotes=[[],[]], gameClockMode="none", gameStarted=false, gamePaused=false;
+let gamePlayerNotes=[[],[]], gameClockMode="none", gameStarted=false, gamePaused=false, gameChartLoading=false;
 let gameRAF=0, gameStartPerf=0, gamePauseAt=0, gameElapsedBeforePause=0, gameDuration=0, gameSpeed=1;
 let gameAudio=null, gameAudioUrl=null, gameAudioCtx=null, gameAudioBase=0, gameAudioNodes=[];
 let gameScore=[{hits:0,misses:0,points:0},{hits:0,misses:0,points:0}];
@@ -433,6 +433,7 @@ async function initDuoView(preferred={}){
   const select=$("duoSong"),previous=select.value;
   select.innerHTML='<option value="">Selecciona MIDI o Guitar Pro</option>'+charts.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio":" · "+r.ext.toUpperCase()}</option>`).join("");
   if(preferred.chartId&&[...select.options].some(o=>o.value===preferred.chartId))select.value=preferred.chartId;
+  else if(preferred.backingId&&!preferred.chartId)select.value="";
   else if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;
   else select.value=BUILTIN_SONGS[0].id;
   const backs=duoRecords.filter(r=>r.type==="audio"),back=$("gameBacking"),oldBack=back.value;
@@ -441,6 +442,7 @@ async function initDuoView(preferred={}){
   else if(oldBack&&[...back.options].some(o=>o.value===oldBack))back.value=oldBack;
   await populateDuoInputs();
   if(select.value)await prepareGameChart(select.value);
+  else {gameChart=null;gamePlayerNotes=[[],[]];gameDuration=0;$('duoStageSong').textContent=back.value?"Audio listo · falta una partitura para mostrar las notas":"Selecciona una partitura o un audio";$('gameStateTag').textContent=back.value?"AUDIO LISTO":"ESPERANDO CANCIÓN";setDuoStatus(back.value?"Audio cargado. Puedes reproducirlo sin partitura o añadir MIDI/Guitar Pro para ver las notas.":"Selecciona un archivo MIDI, Guitar Pro o MP3/WAV.");renderGameNow(0)}
 }
 async function populateDuoInputs(){
   try{
@@ -492,19 +494,51 @@ function stopDuoPlayer(index){
   const n=index+1,p=duoPlayers[index];if(!p)return;cancelAnimationFrame(p.raf);p.stream.getTracks().forEach(t=>t.stop());p.ctx.close().catch(()=>{});duoPlayers[index]=null;
   $("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Sin conectar";$("duoAccuracy"+n).textContent="—";updateDuoConnectionStatus(index);
 }
-function flattenAlphaTrack(track){
-  const out=[];
-  for(const staff of (track.staves||[]))for(const bar of (staff.bars||[]))for(const voice of (bar.voices||[]))for(const beat of (voice.beats||[])){
-    const rawTime=beat.timer==null?NaN:Number(beat.timer);
-    let timeMs=Number.isFinite(rawTime)?rawTime:NaN;
-    if(!Number.isFinite(timeMs)){const tick=Number(beat.absolutePlaybackStart??beat.playbackStart??0);const tempo=Number(track.score?.tempo)||120;timeMs=tick*(60000/tempo/960)}
-    const duration=Number(beat.playbackDuration||beat.displayDuration||240),durationMs=Math.max(70,duration*(500/960));
-    for(const note of (beat.notes||[])){
-      if(note.isPercussion||note.isPiano)continue;
-      const pitch=Number(note.realValue??note.realValueWithoutBend);if(!Number.isFinite(pitch))continue;
-      const stringNumber=Number(note.string)||0,fret=Number.isFinite(Number(note.fret))?Number(note.fret):"—";
-      const rawFinger=Number(note.leftHandFinger),finger=({2:1,3:2,4:3,5:4})[rawFinger]||((typeof fret==="number")?fingerFromFret(fret):0);
-      out.push({timeMs,durationMs,pitch:Math.round(pitch),name:midiName(Math.round(pitch)),stringNumber,fret,finger,hit:false,miss:false});
+function buildAlphaTempoMap(score){
+  const events=[{tick:0,bpm:Math.max(1,Number(score?.tempo)||120)}];
+  const bars=score?.masterBars||[];
+  bars.forEach((bar,index)=>{
+    const barStart=Number.isFinite(Number(bar.start))?Number(bar.start):0;
+    const barDuration=typeof bar.calculateDuration==="function"?Number(bar.calculateDuration(false))||0:0;
+    for(const change of (bar.tempoAutomations||[])){
+      const bpm=Number(change.value),ratio=Math.max(0,Number(change.ratioPosition)||0);
+      if(Number.isFinite(bpm)&&bpm>0)events.push({tick:barStart+barDuration*ratio,bpm});
+    }
+  });
+  events.sort((a,b)=>a.tick-b.tick);
+  const compact=[];for(const ev of events){if(compact.length&&Math.abs(compact[compact.length-1].tick-ev.tick)<.01)compact[compact.length-1]=ev;else compact.push(ev)}
+  return compact;
+}
+function alphaTicksToMs(tick,tempoMap){
+  let ms=0,lastTick=0,bpm=tempoMap[0]?.bpm||120;
+  for(let i=1;i<tempoMap.length;i++){
+    const ev=tempoMap[i];if(ev.tick>=tick)break;
+    ms+=(ev.tick-lastTick)*60000/(bpm*960);lastTick=ev.tick;bpm=ev.bpm;
+  }
+  return ms+Math.max(0,tick-lastTick)*60000/(bpm*960);
+}
+function flattenAlphaTrack(track,score){
+  const out=[],tempoMap=buildAlphaTempoMap(score||track?.score),masterBars=score?.masterBars||track?.score?.masterBars||[];
+  for(const staff of (track.staves||[]))for(let barIndex=0;barIndex<(staff.bars||[]).length;barIndex++){
+    const bar=staff.bars[barIndex],master=masterBars[barIndex];
+    const barStart=Number.isFinite(Number(master?.start))?Number(master.start):
+      (Number.isFinite(Number(bar?.start))?Number(bar.start):0);
+    for(const voice of (bar.voices||[]))for(const beat of (voice.beats||[])){
+      const beatStart=Number.isFinite(Number(beat.playbackStart))?Number(beat.playbackStart):
+        (Number.isFinite(Number(beat.displayStart))?Number(beat.displayStart):0);
+      const absoluteTick=barStart+beatStart;
+      // timer is absolute milliseconds; otherwise use the bar's absolute tick + local beat tick.
+      const timer=beat.timer==null?NaN:Number(beat.timer);
+      const timeMs=Number.isFinite(timer)&&timer>=0?timer:alphaTicksToMs(absoluteTick,tempoMap);
+      const durationTicks=Math.max(1,Number(beat.playbackDuration||beat.displayDuration||240));
+      const durationMs=Math.max(45,alphaTicksToMs(absoluteTick+durationTicks,tempoMap)-alphaTicksToMs(absoluteTick,tempoMap));
+      for(const note of (beat.notes||[])){
+        if(note.isPercussion||note.isPiano)continue;
+        const pitch=Number(note.realValue??note.realValueWithoutBend);if(!Number.isFinite(pitch))continue;
+        const stringNumber=Number(note.string)||0,fret=Number.isFinite(Number(note.fret))?Number(note.fret):"—";
+        const rawFinger=Number(note.leftHandFinger),finger=({2:1,3:2,4:3,5:4})[rawFinger]||((typeof fret==="number")?fingerFromFret(fret):0);
+        out.push({timeMs,durationMs,pitch:Math.round(pitch),name:midiName(Math.round(pitch)),stringNumber,fret,finger,hit:false,miss:false});
+      }
     }
   }
   return out.sort((a,b)=>a.timeMs-b.timeMs);
@@ -524,14 +558,15 @@ async function loadGameGp(song){
     api.error.on(error=>{if(!settled){settled=true;clearTimeout(timeout);reject(new Error(error.message||"Error al analizar Guitar Pro"))}});
   });
   const ok=api.load(new Uint8Array(await song.blob.arrayBuffer()));if(ok===false)throw new Error("alphaTab no pudo iniciar la lectura del archivo.");
-  gameGpScore=await scorePromise;gameGpTracks=(gameGpScore.tracks||[]).map((track,index)=>({index,name:track.name||`Pista ${index+1}`,notes:flattenAlphaTrack(track)}));
+  gameGpScore=await scorePromise;gameGpTracks=(gameGpScore.tracks||[]).map((track,index)=>({index,name:track.name||`Pista ${index+1}`,notes:flattenAlphaTrack(track,gameGpScore)}));
   setGameTracks(gameGpTracks.map(t=>({index:t.index,name:`${t.name} (${t.notes.length} notas)`})));
   if(!gameGpTracks.some(t=>t.notes.length))throw new Error("La tablatura se pudo abrir, pero no contiene notas de guitarra/bajo utilizables en sus pistas.");
   $("duoStageSong").textContent=gameGpScore.title||song.name;
 }
 async function getSongById(id){return id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):await songDbAction("readonly",{id})}
 async function prepareGameChart(id){
-  if(!id){gameChart=null;gamePlayerNotes=[[],[]];setDuoStatus("Selecciona una partitura MIDI o Guitar Pro.");return}
+  if(!id){gameChart=null;gamePlayerNotes=[[],[]];gameChartLoading=false;$("duoStartBtn").disabled=false;setDuoStatus("Selecciona una partitura MIDI o Guitar Pro, o carga un MP3/WAV para reproducir solo el audio.");return}
+  gameChartLoading=true;$("duoStartBtn").disabled=true;setDuoStatus("Preparando partitura y leyendo las pistas…");
   try{
     stopGame(true);const song=await getSongById(id);if(!song)throw new Error("No se encontró el archivo. Vuelve a abrir la biblioteca.");
     gameChart=song;gameGpScore=null;gameGpTracks=[];
@@ -541,8 +576,10 @@ async function prepareGameChart(id){
     }else if(song.type==="guitarpro")await loadGameGp(song);
     else throw new Error("Un MP3/WAV es audio de acompañamiento, no contiene tablatura. Selecciona también un MIDI o Guitar Pro.");
     refreshPlayerCharts();
-    $("duoStageSong").textContent=song.name;$("gameStateTag").textContent="PARTITURA LISTA";setDuoStatus(`${song.name} preparada. Pulsa Iniciar canción para comenzar la pista sincronizada. Puedes probarla sin conectar micrófonos.`);
-  }catch(e){console.error(e);gameChart=null;setDuoStatus("No se pudo preparar la partitura: "+(e.message||e));toast("No se pudo preparar: "+(e.message||e))}
+    if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)throw new Error("La partitura se pudo abrir, pero no se encontraron notas reproducibles en las pistas.");
+    $("duoStageSong").textContent=song.name;$("gameStateTag").textContent="PARTITURA LISTA";setDuoStatus(`${song.name} preparada. Ya puedes pulsar Iniciar canción. No necesitas conectar micrófonos para escucharla.`);
+  }catch(e){console.error(e);gameChart=null;gamePlayerNotes=[[],[]];setDuoStatus("No se pudo preparar la partitura: "+(e.message||e));toast("No se pudo preparar: "+(e.message||e))}
+  finally{gameChartLoading=false;$("duoStartBtn").disabled=false}
 }
 function getSelectedTrackNotes(index){
   const instrument=$("duoInstrument"+(index+1)).value,trackIndex=Number($("duoTrack"+(index+1)).value||0);
@@ -555,30 +592,52 @@ function refreshPlayerCharts(){gamePlayerNotes=[getSelectedTrackNotes(0),getSele
 function resetGameScores(){gameScore=[{hits:0,misses:0,points:0},{hits:0,misses:0,points:0}];[1,2].forEach(n=>{$("gameScore"+n).textContent="0";$("gameHitRate"+n).textContent="0 aciertos · 0 fallos";$("duoAccuracy"+n).textContent="—";$("gameResult"+n).textContent="Listo"});$("gameTeamScore").textContent="0"}
 function currentSongRecord(id){return duoRecords.find(r=>r.id===id)}
 async function startDuo(){
-  if($("duoConnection").value==="remote"){toast("El modo entre dos dispositivos aún requiere un servidor de emparejamiento. Usa conexión local en esta versión.");return}
-  if(!gameChart){await prepareGameChart($("duoSong").value);if(!gameChart)return}
-  if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)refreshPlayerCharts();
-  if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length){toast("La pista seleccionada no contiene notas. Selecciona otra pista.");return}
-  stopGame(false);gamePlayerNotes=[getSelectedTrackNotes(0),getSelectedTrackNotes(1)];gameDuration=Math.max(0,...gamePlayerNotes.flat().map(n=>n.timeMs+n.durationMs));
-  if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)throw new Error("No hay notas en las pistas elegidas.");
-  gameSpeed=Number($("gameSpeed").value)||1;resetGameScores();gameElapsedBeforePause=0;gameStarted=true;gamePaused=false;
-  const backingId=$("gameBacking").value,backing=backingId?currentSongRecord(backingId):null;
+  const startButton=$("duoStartBtn");
   try{
-    if(backing){if(!backing.blob)throw new Error("No se encontró el archivo de acompañamiento. Vuelve a importarlo.");await startBackingAudio(backing,gameSpeed);gameClockMode="audio";}
-    else if(gameChart.type==="midi"){await startMidiGameSynth(gamePlayerNotes,gameSpeed);gameClockMode="midi";}
-    else if(gameChart.type==="guitarpro"){
-      if(!gameGpApi)await loadGameGp(gameChart);
-      if(!gameGpApi.isReadyForPlayback)await waitForGpPlayerReady(gameGpApi);
-      gameGpApi.playbackSpeed=gameSpeed;
-      if(!gameGpApi.play())throw new Error("El motor Guitar Pro no pudo iniciar el audio. Verifica que el navegador haya permitido reproducir sonido.");
-      gameClockMode="gp";
+    if($("duoConnection").value==="remote")throw new Error("El modo entre dos dispositivos requiere un servidor de emparejamiento. Selecciona conexión local.");
+    // Files are loaded into duoRecords when the view/import flow is prepared.
+    // Do not await IndexedDB here: browsers may revoke the click's audio-start
+    // permission after an async gap, causing HTMLAudioElement.play() to reject.
+    if(gameChartLoading)throw new Error("La partitura todavía se está preparando. Espera a que termine la carga y pulsa Iniciar canción otra vez.");
+    const chartId=$("duoSong").value,backingId=$("gameBacking").value;
+    const backing=backingId?currentSongRecord(backingId):null;
+    if(chartId&&(!gameChart||gameChart.id!==chartId))await prepareGameChart(chartId);
+    if(chartId&&!gameChart)throw new Error("La partitura no quedó preparada. Revisa el mensaje de carga y vuelve a seleccionarla.");
+    if(!chartId){gameChart=null;gamePlayerNotes=[[],[]]}
+    if(gameChart){refreshPlayerCharts();if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)throw new Error("La partitura se abrió, pero las pistas seleccionadas no contienen notas tocables. Cambia la pista de uno de los jugadores.")}
+    if(!backing&&!gameChart)throw new Error("Carga un MP3/WAV para reproducir audio o un MIDI/Guitar Pro para iniciar una partida con notas.");
+
+    stopGame(false);
+    if(gameChart){gamePlayerNotes=[getSelectedTrackNotes(0),getSelectedTrackNotes(1)];gameDuration=Math.max(0,...gamePlayerNotes.flat().map(n=>n.timeMs+n.durationMs))}
+    else {gamePlayerNotes=[[],[]];gameDuration=0}
+    gameSpeed=Number($("gameSpeed").value)||1;resetGameScores();gameElapsedBeforePause=0;gameStarted=true;gamePaused=false;
+    startButton.disabled=true;setDuoStatus("Preparando audio y sincronizando la pista…");
+
+    if(backing){
+      if(!backing.blob)throw new Error("No se encontró el archivo de acompañamiento. Vuelve a importarlo.");
+      await startBackingAudio(backing,gameSpeed);gameClockMode="audio";
+      if(Number.isFinite(gameAudio?.duration)&&gameAudio.duration>0)gameDuration=Math.max(gameDuration,gameAudio.duration*1000);
+    }else if(gameChart.type==="midi"){
+      await startMidiGameSynth(gamePlayerNotes,gameSpeed);gameClockMode="midi";
+    }else if(gameChart.type==="guitarpro"){
+      // alphaTab remains responsible for reading the GP file and its tablature.
+      // Use its full SoundFont player when ready; otherwise the built-in WebAudio
+      // pluck synthesizer guarantees audible note playback instead of a dead start button.
+      let nativeStarted=false;
+      if(gameGpApi?.isReadyForPlayback){
+        try{gameGpApi.playbackSpeed=gameSpeed;nativeStarted=gameGpApi.play()===true}catch(error){console.warn("alphaTab playback failed; using note synth",error)}
+      }
+      if(nativeStarted)gameClockMode="gp";
+      else {await startMidiGameSynth(gamePlayerNotes,gameSpeed);gameClockMode="midi";$('rockUploadStatus').textContent="Guitar Pro: reproducción de referencia sintetizada para las notas de guitarra. La partitura original se conserva para la digitación."}
     }
+    if(!gameClockMode||gameClockMode==="none")throw new Error("No se pudo crear una fuente de audio para esta canción.");
     gameStartPerf=performance.now();gameStarted=true;gamePaused=false;
-    $("duoStartBtn").disabled=true;$("gamePauseBtn").disabled=false;$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";$("gameTempoLabel").textContent=Math.round(gameSpeed*100)+"%";
-    [0,1].forEach(i=>{$("gameResult"+(i+1)).textContent=duoPlayers[i]?"Escuchando tu ejecución":"Vista previa · conecta audio para puntuar"});
-    setDuoStatus(duoPlayers.every(Boolean)?"Partida iniciada. Se están evaluando ambas entradas por separado.":duoPlayers.some(Boolean)?"Partida iniciada. Un jugador conectado; el otro está en modo vista previa.":"Vista previa iniciada. La canción y las notas avanzan, pero conecta las entradas para evaluar lo que tocas.");
+    startButton.disabled=true;$("gamePauseBtn").disabled=false;$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";$("gameTempoLabel").textContent=Math.round(gameSpeed*100)+"%";
+    [0,1].forEach(i=>{$("gameResult"+(i+1)).textContent=duoPlayers[i]?"Escuchando tu ejecución":gamePlayerNotes[i].length?"Vista previa · conecta audio para puntuar":"Sin pista asignada"});
+    if(!gameChart)setDuoStatus("Reproduciendo audio. Para que aparezcan las notas, importa también la tablatura MIDI o Guitar Pro correspondiente.");
+    else setDuoStatus(duoPlayers.every(Boolean)?"Canción iniciada. Se evalúan las dos entradas por separado.":duoPlayers.some(Boolean)?"Canción iniciada. Un jugador conectado; el otro está en vista previa.":"Canción iniciada. La pista avanza sin necesidad de conectar micrófonos; conecta las entradas para evaluar tu ejecución.");
     gameRAF=requestAnimationFrame(gameFrame);
-  }catch(e){stopGame(false);$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;console.error(e);setDuoStatus("No se pudo iniciar la reproducción: "+(e.message||e));toast("No arrancó la canción: "+(e.message||e))}
+  }catch(e){stopGame(false);startButton.disabled=false;$("gamePauseBtn").disabled=true;console.error(e);setDuoStatus("No se pudo iniciar la reproducción: "+(e.message||e));toast("No arrancó la canción: "+(e.message||e))}
 }
 function waitForGpPlayerReady(api){return new Promise((resolve,reject)=>{if(api.isReadyForPlayback){resolve();return}let done=false;const timeout=setTimeout(()=>{if(!done){done=true;reject(new Error("El motor de sonido de Guitar Pro no terminó de cargar. Comprueba tu conexión e inténtalo otra vez."))}},35000);api.playerReady.on(()=>{if(!done){done=true;clearTimeout(timeout);resolve()}});api.error.on(e=>{if(!done){done=true;clearTimeout(timeout);reject(new Error(e.message||"Error en el motor de audio Guitar Pro"))}})})}
 async function startBackingAudio(record,speed){
@@ -637,7 +696,7 @@ function gameFrame(){if(!gameStarted||gamePaused)return;const now=getGameTimeMs(
   gameRAF=requestAnimationFrame(gameFrame)
 }
 function finishGame(message){if(!gameStarted)return;gameStarted=false;gamePaused=false;cancelAnimationFrame(gameRAF);if(gameClockMode==="gp"&&gameGpApi){try{gameGpApi.stop()}catch(e){}}if(gameClockMode==="audio"&&gameAudio)gameAudio.pause();if(gameClockMode==="midi"&&gameAudioCtx){gameAudioCtx.close().catch(()=>{});gameAudioCtx=null;gameAudioNodes=[];}$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;$("gameStateTag").textContent="CANCIÓN FINALIZADA";setDuoStatus(`${message} Jugador 1: ${gameScore[0].hits} aciertos de ${gameScore[0].hits+gameScore[0].misses}. Jugador 2: ${gameScore[1].hits} aciertos de ${gameScore[1].hits+gameScore[1].misses}.`)}
-function pauseGame(){if(!gameStarted)return;if(!gamePaused){gamePaused=true;gamePauseAt=performance.now();if(gameClockMode==="audio")gameAudio?.pause();else if(gameClockMode==="gp")gameGpApi?.pause();else if(gameClockMode==="midi"&&gameAudioCtx)gameAudioCtx.suspend();$("gamePauseBtn").textContent="▶ Continuar";$("gameStateTag").textContent="PAUSADO";cancelAnimationFrame(gameRAF)}else{gamePaused=false;if(gameClockMode==="audio")gameAudio?.play();else if(gameClockMode==="gp")gameGpApi?.play();else if(gameClockMode==="midi"&&gameAudioCtx)gameAudioCtx.resume();$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";gameRAF=requestAnimationFrame(gameFrame)}}
+async function pauseGame(){if(!gameStarted)return;if(!gamePaused){gamePaused=true;gamePauseAt=performance.now();if(gameClockMode==="audio")gameAudio?.pause();else if(gameClockMode==="gp")gameGpApi?.pause();else if(gameClockMode==="midi"&&gameAudioCtx)await gameAudioCtx.suspend();$("gamePauseBtn").textContent="▶ Continuar";$("gameStateTag").textContent="PAUSADO";cancelAnimationFrame(gameRAF)}else{gamePaused=false;try{if(gameClockMode==="audio")await gameAudio?.play();else if(gameClockMode==="gp"){if(!gameGpApi?.play())throw new Error("alphaTab no pudo continuar.")}else if(gameClockMode==="midi"&&gameAudioCtx)await gameAudioCtx.resume();$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";gameRAF=requestAnimationFrame(gameFrame)}catch(e){gamePaused=true;$("gameStateTag").textContent="PAUSADO · ERROR DE AUDIO";setDuoStatus("No se pudo continuar la reproducción: "+(e.message||e))}}}
 function stopGame(stopApi=true){cancelAnimationFrame(gameRAF);gameStarted=false;gamePaused=false;if(gameAudio){gameAudio.pause();gameAudio.currentTime=0;gameAudio=null}if(gameAudioUrl){URL.revokeObjectURL(gameAudioUrl);gameAudioUrl=null}gameAudioNodes.forEach(n=>{try{n.stop()}catch(e){}});gameAudioNodes=[];if(gameAudioCtx){gameAudioCtx.close().catch(()=>{});gameAudioCtx=null}if(stopApi&&gameGpApi){try{gameGpApi.stop()}catch(e){}}gameClockMode="none";$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameClock").textContent="00:00";$("gameProgressBar").style.width="0%";if($("gameStateTag"))$("gameStateTag").textContent=gameChart?"PARTITURA LISTA":"ESPERANDO CANCIÓN"}
 function stopDuo(){stopGame();[0,1].forEach(stopDuoPlayer);setDuoStatus("Sesión detenida. Las entradas de audio se han desconectado.");toast("Sesión detenida.")}
 function onGameChartChange(){prepareGameChart($("duoSong").value)}

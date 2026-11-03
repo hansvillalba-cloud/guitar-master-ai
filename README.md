@@ -1,47 +1,29 @@
-# Guitar Master AI V1.6 · Carga directa desde Modo Rock
+# Guitar Master AI V1.7 · Inicio de reproducción corregido
 
-V1.6 corrige la ausencia de importación visible dentro de Modo Rock. Ahora puedes seleccionar archivos desde la propia pantalla de juego; no necesitas ir primero a la biblioteca.
+## Qué se corrigió
+- Modo Rock puede reproducir MP3/WAV aunque todavía no haya una partitura cargada (modo acompañamiento).
+- Al cargar solo un MP3/WAV ya no se selecciona por error el ejercicio incorporado como si fuera la tablatura de esa canción.
+- MIDI se reproduce con el sintetizador Web Audio y anima la pista de notas.
+- Guitar Pro usa el reproductor SoundFont de alphaTab cuando está listo; si no está listo o no puede arrancar, usa un sintetizador de referencia de las notas extraídas para que la partida no se quede bloqueada.
+- Se corrigió el cálculo de tiempos Guitar Pro: los tiempos relativos del beat se combinan con el inicio absoluto del compás; los cambios de tempo se tienen en cuenta en la conversión de ticks a milisegundos.
+- El botón Iniciar muestra el motivo del error en el panel de estado y deja reintentar.
+- La pausa/continuación gestiona los errores de reproducción.
 
-## Qué cambia en V1.6
+## Cómo usar
+1. Abre Modo Rock.
+2. Pulsa Cargar canción / partitura.
+3. Selecciona MIDI o Guitar Pro para la pista de notas. Puedes seleccionar también el MP3/WAV original para usarlo como audio principal.
+4. Espera a que el estado indique que la canción está preparada.
+5. Pulsa Iniciar canción. No es obligatorio conectar los micrófonos para escuchar la reproducción y ver las notas.
+6. Conecta una entrada de audio por jugador solo cuando quieras que la aplicación evalúe lo que tocas.
 
-- Botón **Cargar canción / partitura** dentro de Modo Rock.
-- Permite seleccionar uno o varios archivos: Guitar Pro (`.gp3`, `.gp4`, `.gp5`, `.gpx`, `.gp`), MIDI (`.mid`, `.midi`), MP3 y WAV.
-- Los archivos se guardan en la biblioteca local del navegador (IndexedDB), no se suben a GitHub ni a un servidor.
-- Al terminar la importación, el MIDI/Guitar Pro más reciente de la selección queda elegido como partitura.
-- El MP3/WAV más reciente queda elegido como acompañamiento.
-- El reproductor de audio ya no cambia de pantalla cuando la importación se hace desde Modo Rock.
-- Se conserva la biblioteca de canciones; la opción **Abrir biblioteca** permite administrarlas o eliminarlas.
-- Se incrementó la versión de caché del service worker para que GitHub Pages descargue los archivos de V1.6.
+## Importante
+- MP3/WAV solo: reproduce el audio, pero no puede generar la partitura, las notas o la digitación.
+- MIDI: reproduce notas mediante un sintetizador de referencia; no reproduce el arreglo de banda completo.
+- Guitar Pro: reproduce su SoundFont cuando alphaTab está disponible; si no, se usa una referencia sintetizada de las notas de la pista. Esta alternativa no reproduce batería, efectos, articulaciones ni todos los instrumentos del archivo.
+- Para tocar siguiendo la canción original, importa tanto la tablatura MIDI/Guitar Pro como el MP3/WAV correspondiente y verifica que estén alineados desde el mismo punto.
+- Para la detección de guitarra se necesita HTTPS (GitHub Pages) y permiso de micrófono.
+- Dos dispositivos remotos siguen necesitando un servidor de emparejamiento.
 
-## Cómo usar la carga desde Modo Rock
-
-1. Abre **Modo Rock**.
-2. Pulsa **Cargar canción / partitura**.
-3. Selecciona un archivo MIDI o Guitar Pro para obtener las notas, tiempos, pistas y posiciones.
-4. Opcionalmente, en el mismo diálogo selecciona también el MP3/WAV que corresponde a esa partitura. Usa Ctrl o Shift para seleccionar varios archivos.
-5. Espera el mensaje de confirmación. La partitura y el acompañamiento aparecen seleccionados en sus respectivos campos.
-6. Revisa las pistas de cada jugador, conecta las entradas de audio cuando vayas a evaluar interpretación y pulsa **Iniciar canción**.
-
-## Qué aporta cada formato
-
-- **MIDI:** proporciona notas y tiempos para el note highway; la posición de cuerda y traste se estima en afinación estándar.
-- **Guitar Pro:** permite extraer notas, cuerdas, trastes y tiempos cuando el formato y la pista son compatibles. El lector y el SoundFont se cargan desde alphaTab CDN, por lo que se requiere internet.
-- **MP3/WAV:** se reproduce como acompañamiento. No contiene datos de tablatura por sí mismo; para que aparezcan notas en el juego debe cargarse también su MIDI o Guitar Pro correspondiente.
-
-## Publicar en GitHub Pages
-
-1. Extrae el ZIP de V1.6.
-2. Sube el contenido completo a la raíz de tu repositorio, reemplazando `index.html`, `app.js`, `styles.css`, `sw.js` y demás archivos. Conserva `assets/` y `.nojekyll`.
-3. Haz commit en la rama `main`.
-4. Espera a que GitHub Pages termine el despliegue.
-5. Abre el sitio y recarga con `Ctrl + F5`. La caché nueva del service worker se llama `guitar-master-ai-v1-6`.
-
-## Verificación realizada
-
-- `node --check app.js` sin errores de sintaxis.
-- Comprobación de IDs HTML: no hay IDs duplicados.
-- Comprobación estática de los controles y manejadores de importación desde Modo Rock.
-- Verificación de que el importador devuelve los identificadores creados y puede evitar la apertura del reproductor de biblioteca cuando se carga desde Modo Rock.
-- El ZIP se crea desde la raíz del proyecto y se vuelve a abrir para verificar su contenido.
-
-La prueba local de carga de archivos reales depende del navegador y de los archivos que selecciones. El MP3/WAV no se convierte automáticamente en tablatura.
+## Publicación en GitHub Pages
+Reemplaza el contenido del repositorio con todos los archivos de este paquete, conservando `assets/` y `.nojekyll`. Haz commit en `main` y recarga GitHub Pages con Ctrl+F5. La caché cambia a `guitar-master-ai-v1-7`.
