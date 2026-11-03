@@ -1,0 +1,20 @@
+{
+  "name": "Guitar Master AI",
+  "short_name": "Guitar Master",
+  "description": "Aprende guitarra tocando: afinador, diapasón y práctica interactiva.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080d16",
+  "theme_color": "#0b1220",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
