@@ -395,99 +395,254 @@ $("songAudio").addEventListener("pause",()=>{if($("songAudio").currentTime>0)set
 $("songAudio").addEventListener("ended",()=>setAudioSongStatus("La canción terminó."));
 $("songAudio").addEventListener("error",()=>{const code=$("songAudio").error?.code;const descriptions={1:"carga cancelada",2:"error de lectura",3:"formato o códec no compatible",4:"formato no compatible"};setAudioSongStatus("No se pudo decodificar el audio: "+(descriptions[code]||"archivo inválido"))});
 
-// Modo Dúo local: dos entradas separadas o dos canales de una interfaz estéreo.
-const duoPlayers=[null,null];let duoRecords=[];let duoSharedAudio=null;let duoSharedUrl=null;let duoMidiCtx=null,duoMidiTimers=[],duoMidiNodes=[],duoGpActive=false;
-function duoInstrumentStrings(value){return value.includes("Bajo")?"E A D G":"E A D G B E"}
-function updateDuoInstrumentLabels(){[1,2].forEach(n=>{const instrument=$("duoInstrument"+n).value;$("duoStageInstrument"+n).textContent=instrument;$("duoFret"+n).textContent=duoInstrumentStrings(instrument)})}
+// ===================== ROCK ENGINE V1.5 · MODO DÚO =====================
+const duoPlayers=[null,null];
+let duoRecords=[], gameChart=null, gameGpApi=null, gameGpScore=null, gameGpTracks=[];
+let gamePlayerNotes=[[],[]], gameClockMode="none", gameStarted=false, gamePaused=false;
+let gameRAF=0, gameStartPerf=0, gamePauseAt=0, gameElapsedBeforePause=0, gameDuration=0, gameSpeed=1;
+let gameAudio=null, gameAudioUrl=null, gameAudioCtx=null, gameAudioBase=0, gameAudioNodes=[];
+let gameScore=[{hits:0,misses:0,points:0},{hits:0,misses:0,points:0}];
+const GAME_LOOKAHEAD_MS=3600, GAME_HIT_WINDOW_MS=190;
+function duoInstrumentStrings(value){return value.includes("Bajo")?"G D A E":"E A D G B E"}
+function updateDuoInstrumentLabels(){[1,2].forEach(n=>{const instrument=$("duoInstrument"+n).value;$("duoStageInstrument"+n).textContent=instrument;});}
+function setDuoStatus(message){const el=$("duoSessionStatus");if(el)el.textContent=message}
+function fingerFromFret(fret){return fret<=0?0:((Math.max(1,fret)-1)%4)+1}
+function fingerName(n){return ["Al aire","Índice","Medio","Anular","Meñique"][n]||"Sugerido"}
+function playerTuning(instrument){return instrument.includes("Bajo")?[28,33,38,43]:[40,45,50,55,59,64]}
+function positionForMidi(midi,instrument){
+  const tuning=playerTuning(instrument),choices=[];
+  tuning.forEach((open,i)=>{const fret=midi-open;if(fret>=0&&fret<=22)choices.push({stringNumber:i+1,fret,stringIndex:tuning.length-i})});
+  choices.sort((a,b)=>a.fret-b.fret||b.stringNumber-a.stringNumber);
+  const p=choices[0]||{stringNumber:0,fret:"—",stringIndex:0};
+  return {...p,finger:typeof p.fret==="number"?fingerFromFret(p.fret):0};
+}
+function normalizeMidiNote(n,instrument){
+  const position=positionForMidi(n.pitch,instrument);
+  return {timeMs:Number(n.startMs)||0,durationMs:Number(n.durationMs)||150,pitch:n.pitch,name:n.name||midiName(n.pitch),stringNumber:position.stringNumber,fret:position.fret,finger:position.finger,hit:false,miss:false};
+}
+function midiTrackIndexes(song){const set=new Set((song.parsed?.notes||[]).map(n=>Number.isFinite(n.track)?n.track:0));return [...set].sort((a,b)=>a-b)}
+function updateTrackPickers(items){
+  [1,2].forEach(n=>{const select=$("duoTrack"+n),old=select.value;select.innerHTML=items.map((it,i)=>`<option value="${it.index}">${escapeHtml(it.name||("Pista "+(i+1)))}</option>`).join("")||'<option value="0">Sin pistas</option>';if([...select.options].some(o=>o.value===old))select.value=old;});
+}
 async function initDuoView(){
-  updateDuoInstrumentLabels();const select=$("duoSong"),previous=select.value;
-  try{duoRecords=await songDbAction("readonly")}catch(e){duoRecords=[]}
-  const opts=[...BUILTIN_SONGS,...duoRecords].map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio": " · "+r.ext.toUpperCase()}</option>`).join("");
-  select.innerHTML='<option value="">Selecciona una canción de la biblioteca</option>'+opts;
-  if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;
+  updateDuoInstrumentLabels();
+  try{duoRecords=await songDbAction("readonly")}catch(e){duoRecords=[];setDuoStatus("No se pudo abrir la biblioteca local: "+(e.message||e))}
+  const charts=[...BUILTIN_SONGS,...duoRecords.filter(r=>r.type==="midi"||r.type==="guitarpro")];
+  const select=$("duoSong"),previous=select.value;
+  select.innerHTML='<option value="">Selecciona MIDI o Guitar Pro</option>'+charts.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio":" · "+r.ext.toUpperCase()}</option>`).join("");
+  if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;else select.value=BUILTIN_SONGS[0].id;
+  const backs=duoRecords.filter(r=>r.type==="audio"),back=$("gameBacking"),oldBack=back.value;
+  back.innerHTML='<option value="">Usar audio sintetizado de la partitura</option>'+backs.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)} · ${r.ext.toUpperCase()}</option>`).join("");
+  if(oldBack&&[...back.options].some(o=>o.value===oldBack))back.value=oldBack;
   await populateDuoInputs();
+  if(select.value)await prepareGameChart(select.value);
 }
 async function populateDuoInputs(){
   try{
     const devices=await navigator.mediaDevices.enumerateDevices(),inputs=devices.filter(d=>d.kind==="audioinput");
-    [1,2].forEach(n=>{const el=$("duoInput"+n),old=el.value;el.innerHTML='<option value="">Entrada predeterminada</option>'+inputs.map((d,i)=>`<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label||`Entrada de audio ${i+1}`)}</option>`).join("");if(old)el.value=old});
-  }catch(e){console.warn("No se pudieron enumerar las entradas de audio",e)}
+    [1,2].forEach(n=>{const el=$("duoInput"+n),old=el.value;el.innerHTML='<option value="">Entrada predeterminada</option>'+inputs.map((d,i)=>`<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label||("Entrada de audio "+(i+1)))}</option>`).join("");if(old)el.value=old});
+  }catch(e){console.warn("No se pudieron enumerar las entradas",e)}
+}
+function updateDuoConnectionStatus(index){
+  const n=index+1,p=duoPlayers[index];
+  $("duoConnect"+n).textContent=p?`Jugador ${n} conectado`:`Conectar jugador ${n}`;
+  $("duoConnect"+n).disabled=!!p;
+  $("duoDot"+n).classList.toggle("connected",!!p);
+  $("duoStageStatus"+n).textContent=p?`Entrada validada · ${p.label} · canal ${p.channelIndex+1}`:"Sin entrada · vista previa disponible";
 }
 async function connectDuoPlayer(index){
-  const n=index+1;if(duoPlayers[index]){toast(`El jugador ${n} ya está conectado.`);return}
-  if(!navigator.mediaDevices?.getUserMedia){toast("Se necesita Chrome o Edge actualizado y HTTPS para capturar audio.");return}
-  let media=null;
+  const n=index+1;if(duoPlayers[index])return;
+  if(!navigator.mediaDevices?.getUserMedia){toast("El audio requiere Chrome/Edge y la página publicada mediante HTTPS.");return}
+  let media=null,ctx=null;
   try{
-    const deviceId=$("duoInput"+n).value,other=duoPlayers[1-index];let channelIndex=Number($("duoChannel"+n).value||0);
-    const sameDevice=!!other&&(other.deviceId||"")===(deviceId||"");
-    if(sameDevice&&channelIndex===other.channelIndex){channelIndex=other.channelIndex===0?1:0;$("duoChannel"+n).value=String(channelIndex);toast(`Se asignó el canal ${channelIndex+1} al jugador ${n} para separar ambas señales.`)}
-    if(other&&(other.deviceId||"")===(deviceId||"")&&other.channelIndex===channelIndex)throw new Error("Los dos jugadores no pueden usar el mismo canal de audio. Selecciona canales 1 y 2, o entradas distintas.");
-    const audio={...(deviceId?{deviceId:{exact:deviceId}}:{}),channelCount:{ideal:2},echoCancellation:false,noiseSuppression:false,autoGainControl:false};
-    media=await navigator.mediaDevices.getUserMedia({audio,video:false});
-    const track=media.getAudioTracks()[0],settings=track?.getSettings?.()||{},channelCount=settings.channelCount||1,actualDeviceId=settings.deviceId||deviceId;
-    if(other&&(other.actualDeviceId||other.deviceId||"")===(actualDeviceId||"")&&other.channelIndex===channelIndex){
-      if(channelCount>1){channelIndex=other.channelIndex===0?1:0;$("duoChannel"+n).value=String(channelIndex);toast(`La entrada corresponde al mismo dispositivo: asigné automáticamente el canal ${channelIndex+1} al jugador ${n}.`)}
-      else throw new Error("Los dos jugadores están usando el mismo dispositivo mono. Conecta una segunda entrada o usa una interfaz estéreo con canales separados.");
+    const selectedDevice=$("duoInput"+n).value,channelIndex=Number($("duoChannel"+n).value||0),other=duoPlayers[1-index];
+    const constraints={...(selectedDevice?{deviceId:{exact:selectedDevice}}:{}),channelCount:{ideal:2},echoCancellation:false,noiseSuppression:false,autoGainControl:false};
+    media=await navigator.mediaDevices.getUserMedia({audio:constraints,video:false});
+    const track=media.getAudioTracks()[0],settings=track?.getSettings?.()||{},actualDeviceId=settings.deviceId||selectedDevice||"default",channelCount=settings.channelCount||1;
+    if(channelIndex>0&&channelCount<2)throw new Error("La entrada seleccionada solo entrega un canal mono. Elige otra entrada o una interfaz estéreo.");
+    if(other){
+      const sameDevice=(other.actualDeviceId||other.deviceId||"default")===(actualDeviceId||"default");
+      if(sameDevice&&other.channelIndex===channelIndex)throw new Error("Los dos jugadores están usando la misma entrada y canal. Usa otra entrada o asigna canal 1 a uno y canal 2 al otro.");
+      if(sameDevice&&channelCount<2)throw new Error("El micrófono compartido es mono. No puede dividirse en dos guitarras independientes.");
     }
-    if(channelIndex>0&&channelCount<2)throw new Error("Esta entrada solo ofrece un canal mono. Para usar canal 2 necesitas una interfaz estéreo o una segunda entrada de audio independiente.");
-    const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("El navegador no dispone de AudioContext.");
-    const ctx=new AC({latencyHint:"interactive"});await ctx.resume();const src=ctx.createMediaStreamSource(media),an=ctx.createAnalyser();an.fftSize=8192;an.smoothingTimeConstant=0;
-    if(channelCount>1){const splitter=ctx.createChannelSplitter(channelCount);src.connect(splitter);splitter.connect(an,channelIndex);}
-    else src.connect(an);
-    const player={stream:media,ctx,src,an,raf:0,buffer:new Float32Array(an.fftSize),deviceId,actualDeviceId,channelIndex,channelCount,lastMidi:null,lastNoteAt:0,notes:0};duoPlayers[index]=player;
-    let lastAnalysis=0;const tick=now=>{
-      if(!duoPlayers[index])return;
-      if(now-lastAnalysis>=65){lastAnalysis=now;an.getFloatTimeDomainData(player.buffer);const pitch=detectPitch(player.buffer,ctx.sampleRate);
-        if(pitch){const cents=Math.abs(noteCents(pitch.frequency,pitch.midi));$("duoNote"+n).textContent=midiName(pitch.midi);$("duoPitch"+n).textContent=pitch.frequency.toFixed(1)+" Hz · "+(cents<=5?"Afinada":cents.toFixed(0)+" cents de desviación");if(pitch.midi!==player.lastMidi&&now-player.lastNoteAt>180){player.notes++;player.lastMidi=pitch.midi;player.lastNoteAt=now;$("duoAccuracy"+n).textContent=player.notes+" notas"}}
-        else if(now-player.lastNoteAt>800){$("duoNote"+n).textContent="—"}}
+    const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("Este navegador no ofrece AudioContext.");
+    ctx=new AC({latencyHint:"interactive"});await ctx.resume();
+    const source=ctx.createMediaStreamSource(media),analyser=ctx.createAnalyser();analyser.fftSize=8192;analyser.smoothingTimeConstant=0;
+    if(channelCount>1){const splitter=ctx.createChannelSplitter(channelCount);source.connect(splitter);splitter.connect(analyser,channelIndex)}else source.connect(analyser);
+    const player={stream:media,ctx,source,analyser,buffer:new Float32Array(analyser.fftSize),raf:0,deviceId:selectedDevice,actualDeviceId,channelIndex,channelCount,label:track.label||`Entrada ${n}`,lastMidi:null,lastSignalAt:0,notes:0};
+    duoPlayers[index]=player;let lastAnalysis=0;
+    const tick=now=>{
+      if(duoPlayers[index]!==player)return;
+      if(now-lastAnalysis>=55){lastAnalysis=now;analyser.getFloatTimeDomainData(player.buffer);const pitch=detectPitch(player.buffer,ctx.sampleRate);
+        if(pitch){const attack=player.lastMidi!==pitch.midi||now-player.lastSignalAt>135;$("duoNote"+n).textContent=midiName(pitch.midi);$("duoPitch"+n).textContent=`${pitch.frequency.toFixed(1)} Hz · señal activa`;player.lastSignalAt=now;player.lastMidi=pitch.midi;if(attack&&gameStarted&&!gamePaused)registerGamePitch(index,pitch.midi,getGameTimeMs())}
+        else if(now-player.lastSignalAt>120){player.lastMidi=null;$("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Esperando nota"}
+      }
       player.raf=requestAnimationFrame(tick);
-    };player.raf=requestAnimationFrame(tick);
-    $("duoConnect"+n).textContent=`Jugador ${n} conectado`;$("duoConnect"+n).disabled=true;$("duoStageStatus"+n).textContent=`Entrada activa · canal ${channelIndex+1}`;
-    $("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados";
-    await populateDuoInputs();toast(`Audio del jugador ${n} conectado. Canal ${channelIndex+1}.`);
-  }catch(e){if(media)media.getTracks().forEach(t=>t.stop());console.error(e);toast(`Jugador ${n}: ${e.message||"No se pudo conectar el audio."}`)}
+    };
+    player.raf=requestAnimationFrame(tick);updateDuoConnectionStatus(index);await populateDuoInputs();
+    setDuoStatus(`Jugador ${n} conectado. Entrada de audio concedida y canal ${channelIndex+1} asignado.`);
+  }catch(e){if(media)media.getTracks().forEach(t=>t.stop());if(ctx)ctx.close().catch(()=>{});console.error(e);$("duoDot"+n).classList.add("error");toast(`Jugador ${n}: ${e.message||"no se pudo abrir la entrada"}`);setDuoStatus(`No se conectó el jugador ${n}: ${e.message||e}`)}
 }
 function stopDuoPlayer(index){
   const n=index+1,p=duoPlayers[index];if(!p)return;cancelAnimationFrame(p.raf);p.stream.getTracks().forEach(t=>t.stop());p.ctx.close().catch(()=>{});duoPlayers[index]=null;
-  $("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Esperando conexión";$("duoAccuracy"+n).textContent="—";$("duoConnect"+n).disabled=false;$("duoConnect"+n).textContent=`Conectar jugador ${n}`;$("duoStageStatus"+n).textContent="Sin conexión";$("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados";
+  $("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Sin conectar";$("duoAccuracy"+n).textContent="—";updateDuoConnectionStatus(index);
 }
-function stopDuoMidi(){duoMidiTimers.forEach(clearTimeout);duoMidiTimers=[];duoMidiNodes.forEach(n=>{try{n.stop()}catch(e){}});duoMidiNodes=[];if(duoMidiCtx){duoMidiCtx.close().catch(()=>{});duoMidiCtx=null}}
-function stopDuo(){
-  stopDuoPlayer(0);stopDuoPlayer(1);if(duoSharedAudio){duoSharedAudio.pause();duoSharedAudio.src="";duoSharedAudio=null}if(duoSharedUrl){URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=null}
-  stopDuoMidi();if(duoGpActive&&alphaTabApi){try{alphaTabApi.stop()}catch(e){}duoGpActive=false;}
-  $("duoGpPlayer").hidden=true;$("duoSessionStatus").textContent="Sesión detenida";toast("Sesión de dúo detenida.");
+function flattenAlphaTrack(track){
+  const out=[];
+  for(const staff of (track.staves||[]))for(const bar of (staff.bars||[]))for(const voice of (bar.voices||[]))for(const beat of (voice.beats||[])){
+    const rawTime=beat.timer==null?NaN:Number(beat.timer);
+    let timeMs=Number.isFinite(rawTime)?rawTime:NaN;
+    if(!Number.isFinite(timeMs)){const tick=Number(beat.absolutePlaybackStart??beat.playbackStart??0);const tempo=Number(track.score?.tempo)||120;timeMs=tick*(60000/tempo/960)}
+    const duration=Number(beat.playbackDuration||beat.displayDuration||240),durationMs=Math.max(70,duration*(500/960));
+    for(const note of (beat.notes||[])){
+      if(note.isPercussion||note.isPiano)continue;
+      const pitch=Number(note.realValue??note.realValueWithoutBend);if(!Number.isFinite(pitch))continue;
+      const stringNumber=Number(note.string)||0,fret=Number.isFinite(Number(note.fret))?Number(note.fret):"—";
+      const rawFinger=Number(note.leftHandFinger),finger=({2:1,3:2,4:3,5:4})[rawFinger]||((typeof fret==="number")?fingerFromFret(fret):0);
+      out.push({timeMs,durationMs,pitch:Math.round(pitch),name:midiName(Math.round(pitch)),stringNumber,fret,finger,hit:false,miss:false});
+    }
+  }
+  return out.sort((a,b)=>a.timeMs-b.timeMs);
 }
-async function startDuo(){
-  if($("duoConnection").value==="remote"){toast("La conexión entre dos dispositivos necesita configurar un servidor de emparejamiento. No está habilitada todavía.");return}
-  const id=$("duoSong").value;if(!id){toast("Selecciona una canción para los dos jugadores.");return}
-  if(!duoPlayers[0]||!duoPlayers[1]){toast("Conecta el audio de los dos jugadores antes de iniciar la canción.");return}
-  if(duoPlayers[0].stream===duoPlayers[1].stream||(duoPlayers[0].actualDeviceId||duoPlayers[0].deviceId||"")===(duoPlayers[1].actualDeviceId||duoPlayers[1].deviceId||"")&&duoPlayers[0].channelIndex===duoPlayers[1].channelIndex){toast("Las entradas de los jugadores no están separadas. Usa dos entradas o los canales 1 y 2 de una interfaz estéreo.");return}
-  const song=id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):duoRecords.find(x=>x.id===id);if(!song){toast("No se encontró la canción seleccionada. Vuelve a abrir el modo Dúo para actualizar la biblioteca.");return}
+function setGameTracks(items){updateTrackPickers(items);}
+async function loadGameGp(song){
+  if(gameChart?.id===song.id&&gameGpScore)return;
+  if(!window.alphaTab?.AlphaTabApi)throw new Error("No se pudo cargar el lector Guitar Pro. Revisa la conexión a internet y vuelve a intentar.");
+  if(gameGpApi){try{gameGpApi.destroy()}catch(e){}gameGpApi=null}
+  const root=$("duoGpPlayer");root.hidden=false;root.classList.add("game-gp-source");
+  const base="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.9.0/dist/";
+  const api=new window.alphaTab.AlphaTabApi($("duoGpScore"),{core:{fontDirectory:base+"font/"},player:{enablePlayer:true,soundFont:base+"soundfont/sonivox.sf2"}});
+  gameGpApi=api;let settled=false;
+  const scorePromise=new Promise((resolve,reject)=>{
+    const timeout=setTimeout(()=>{if(!settled){settled=true;reject(new Error("Guitar Pro tardó demasiado en analizarse. Comprueba la conexión."))}},40000);
+    api.scoreLoaded.on(score=>{if(settled)return;settled=true;clearTimeout(timeout);resolve(score)});
+    api.error.on(error=>{if(!settled){settled=true;clearTimeout(timeout);reject(new Error(error.message||"Error al analizar Guitar Pro"))}});
+  });
+  const ok=api.load(new Uint8Array(await song.blob.arrayBuffer()));if(ok===false)throw new Error("alphaTab no pudo iniciar la lectura del archivo.");
+  gameGpScore=await scorePromise;gameGpTracks=(gameGpScore.tracks||[]).map((track,index)=>({index,name:track.name||`Pista ${index+1}`,notes:flattenAlphaTrack(track)}));
+  setGameTracks(gameGpTracks.map(t=>({index:t.index,name:`${t.name} (${t.notes.length} notas)`})));
+  if(!gameGpTracks.some(t=>t.notes.length))throw new Error("La tablatura se pudo abrir, pero no contiene notas de guitarra/bajo utilizables en sus pistas.");
+  $("duoStageSong").textContent=gameGpScore.title||song.name;
+}
+async function getSongById(id){return id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):await songDbAction("readonly",{id})}
+async function prepareGameChart(id){
+  if(!id){gameChart=null;gamePlayerNotes=[[],[]];setDuoStatus("Selecciona una partitura MIDI o Guitar Pro.");return}
   try{
-    $("duoStageSong").textContent=song.name;$("duoStageStatus1").textContent="Entrada activa";$("duoStageStatus2").textContent="Entrada activa";$("duoGpPlayer").hidden=true;
-    if(duoSharedAudio){duoSharedAudio.pause();duoSharedAudio=null}if(duoSharedUrl){URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=null}stopDuoMidi();
-    if(song.type==="audio"){
-      if(!song.blob)throw new Error("El archivo de audio no está guardado. Vuelve a importarlo.");
-      duoSharedUrl=URL.createObjectURL(song.blob);duoSharedAudio=new Audio();duoSharedAudio.src=duoSharedUrl;duoSharedAudio.preload="auto";duoSharedAudio.onended=()=>{$("duoSessionStatus").textContent="Canción finalizada · entradas aún activas"};duoSharedAudio.onerror=()=>{$("duoSessionStatus").textContent="No se pudo decodificar el audio elegido"};await duoSharedAudio.play();
-    }else if(song.type==="midi"&&song.parsed?.notes?.length){await playDuoMidi(song.parsed.notes)}
-    else if(song.type==="guitarpro"){
-      $("duoGpPlayer").hidden=false;const api=await loadGuitarPro(song,"duoGpScore","duoGpStatus","duoGpPlayBtn","duoGpPauseBtn","duoGpStopBtn");
-      if(!api.isReadyForPlayback)throw new Error("La tablatura cargó, pero el motor de audio aún no está listo.");
-      duoGpActive=false;$("duoGpStatus").textContent="Partitura lista. Pulsa «Reproducir partitura» para iniciar el sonido.";
-      $("duoSessionStatus").textContent="Partitura lista · esperando que inicies la reproducción";toast("Partitura preparada. Pulsa Reproducir partitura en el panel Dúo.");return;
-    }else throw new Error("Este formato todavía no se puede reproducir en modo Dúo.");
-    $("duoSessionStatus").textContent="Sesión activa · misma canción para ambos";toast("¡Reproducción compartida iniciada!");
-  }catch(e){console.error(e);$("duoSessionStatus").textContent="No se pudo iniciar la canción";toast("No arrancó la canción: "+(e.message||"error desconocido"))}
+    stopGame(true);const song=await getSongById(id);if(!song)throw new Error("No se encontró el archivo. Vuelve a abrir la biblioteca.");
+    gameChart=song;gameGpScore=null;gameGpTracks=[];
+    if(song.type!=="guitarpro"&&gameGpApi){try{gameGpApi.destroy()}catch(e){}gameGpApi=null}
+    if(song.type==="midi"){
+      const indexes=midiTrackIndexes(song);setGameTracks(indexes.map((index,i)=>({index,name:`Pista ${index+1} (${song.parsed.notes.filter(n=>(n.track??0)===index).length} notas)`})));
+    }else if(song.type==="guitarpro")await loadGameGp(song);
+    else throw new Error("Un MP3/WAV es audio de acompañamiento, no contiene tablatura. Selecciona también un MIDI o Guitar Pro.");
+    refreshPlayerCharts();
+    $("duoStageSong").textContent=song.name;$("gameStateTag").textContent="PARTITURA LISTA";setDuoStatus(`${song.name} preparada. Pulsa Iniciar canción para comenzar la pista sincronizada. Puedes probarla sin conectar micrófonos.`);
+  }catch(e){console.error(e);gameChart=null;setDuoStatus("No se pudo preparar la partitura: "+(e.message||e));toast("No se pudo preparar: "+(e.message||e))}
 }
-async function playDuoMidi(notes){
-  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("El navegador no admite reproducción MIDI.");
-  duoMidiCtx=new AC({latencyHint:"interactive"});const ctx=duoMidiCtx;await ctx.resume();const base=ctx.currentTime+.16;
-  notes.forEach(n=>{const start=base+n.startMs/1000,duration=Math.min(4,Math.max(.07,n.durationMs/1000));schedulePluck(ctx,n.pitch,n.velocity,start,duration,duoMidiNodes)});
-  const end=Math.max(...notes.map(n=>n.startMs+n.durationMs));duoMidiTimers.push(setTimeout(()=>{$("duoSessionStatus").textContent="MIDI finalizado · entradas aún activas";stopDuoMidi()},end+350));
+function getSelectedTrackNotes(index){
+  const instrument=$("duoInstrument"+(index+1)).value,trackIndex=Number($("duoTrack"+(index+1)).value||0);
+  if(!gameChart)return [];
+  if(gameChart.type==="midi")return (gameChart.parsed.notes||[]).filter(n=>(Number.isFinite(n.track)?n.track:0)===trackIndex).map(n=>normalizeMidiNote(n,instrument)).sort((a,b)=>a.timeMs-b.timeMs);
+  if(gameChart.type==="guitarpro")return (gameGpTracks.find(t=>t.index===trackIndex)?.notes||[]).map(n=>({...n,hit:false,miss:false})).sort((a,b)=>a.timeMs-b.timeMs);
+  return [];
 }
-$("duoConnect1").addEventListener("click",()=>connectDuoPlayer(0));$("duoConnect2").addEventListener("click",()=>connectDuoPlayer(1));$("duoStopBtn").addEventListener("click",stopDuo);$("duoStartBtn").addEventListener("click",startDuo);
-[1,2].forEach(n=>$("duoInstrument"+n).addEventListener("change",updateDuoInstrumentLabels));
-$("duoConnection").addEventListener("change",e=>{const remote=e.target.value==="remote";$("duoConnectionNote").textContent=remote?"La modalidad entre dos dispositivos todavía necesita un servidor de emparejamiento. Usa el modo local para esta versión.":"Conecta dos entradas de audio distintas, o selecciona una interfaz estéreo y asigna canal 1 al jugador 1 y canal 2 al jugador 2.";$("duoPlayerGrid").classList.toggle("remote-preview",remote)});
+function refreshPlayerCharts(){gamePlayerNotes=[getSelectedTrackNotes(0),getSelectedTrackNotes(1)];gameDuration=Math.max(0,...gamePlayerNotes.flat().map(n=>n.timeMs+n.durationMs));renderGameNow(0)}
+function resetGameScores(){gameScore=[{hits:0,misses:0,points:0},{hits:0,misses:0,points:0}];[1,2].forEach(n=>{$("gameScore"+n).textContent="0";$("gameHitRate"+n).textContent="0 aciertos · 0 fallos";$("duoAccuracy"+n).textContent="—";$("gameResult"+n).textContent="Listo"});$("gameTeamScore").textContent="0"}
+function currentSongRecord(id){return duoRecords.find(r=>r.id===id)}
+async function startDuo(){
+  if($("duoConnection").value==="remote"){toast("El modo entre dos dispositivos aún requiere un servidor de emparejamiento. Usa conexión local en esta versión.");return}
+  if(!gameChart){await prepareGameChart($("duoSong").value);if(!gameChart)return}
+  if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)refreshPlayerCharts();
+  if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length){toast("La pista seleccionada no contiene notas. Selecciona otra pista.");return}
+  stopGame(false);gamePlayerNotes=[getSelectedTrackNotes(0),getSelectedTrackNotes(1)];gameDuration=Math.max(0,...gamePlayerNotes.flat().map(n=>n.timeMs+n.durationMs));
+  if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)throw new Error("No hay notas en las pistas elegidas.");
+  gameSpeed=Number($("gameSpeed").value)||1;resetGameScores();gameElapsedBeforePause=0;gameStarted=true;gamePaused=false;
+  const backingId=$("gameBacking").value,backing=backingId?currentSongRecord(backingId):null;
+  try{
+    if(backing){if(!backing.blob)throw new Error("No se encontró el archivo de acompañamiento. Vuelve a importarlo.");await startBackingAudio(backing,gameSpeed);gameClockMode="audio";}
+    else if(gameChart.type==="midi"){await startMidiGameSynth(gamePlayerNotes,gameSpeed);gameClockMode="midi";}
+    else if(gameChart.type==="guitarpro"){
+      if(!gameGpApi)await loadGameGp(gameChart);
+      if(!gameGpApi.isReadyForPlayback)await waitForGpPlayerReady(gameGpApi);
+      gameGpApi.playbackSpeed=gameSpeed;
+      if(!gameGpApi.play())throw new Error("El motor Guitar Pro no pudo iniciar el audio. Verifica que el navegador haya permitido reproducir sonido.");
+      gameClockMode="gp";
+    }
+    gameStartPerf=performance.now();gameStarted=true;gamePaused=false;
+    $("duoStartBtn").disabled=true;$("gamePauseBtn").disabled=false;$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";$("gameTempoLabel").textContent=Math.round(gameSpeed*100)+"%";
+    [0,1].forEach(i=>{$("gameResult"+(i+1)).textContent=duoPlayers[i]?"Escuchando tu ejecución":"Vista previa · conecta audio para puntuar"});
+    setDuoStatus(duoPlayers.every(Boolean)?"Partida iniciada. Se están evaluando ambas entradas por separado.":duoPlayers.some(Boolean)?"Partida iniciada. Un jugador conectado; el otro está en modo vista previa.":"Vista previa iniciada. La canción y las notas avanzan, pero conecta las entradas para evaluar lo que tocas.");
+    gameRAF=requestAnimationFrame(gameFrame);
+  }catch(e){stopGame(false);$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;console.error(e);setDuoStatus("No se pudo iniciar la reproducción: "+(e.message||e));toast("No arrancó la canción: "+(e.message||e))}
+}
+function waitForGpPlayerReady(api){return new Promise((resolve,reject)=>{if(api.isReadyForPlayback){resolve();return}let done=false;const timeout=setTimeout(()=>{if(!done){done=true;reject(new Error("El motor de sonido de Guitar Pro no terminó de cargar. Comprueba tu conexión e inténtalo otra vez."))}},35000);api.playerReady.on(()=>{if(!done){done=true;clearTimeout(timeout);resolve()}});api.error.on(e=>{if(!done){done=true;clearTimeout(timeout);reject(new Error(e.message||"Error en el motor de audio Guitar Pro"))}})})}
+async function startBackingAudio(record,speed){
+  if(gameAudio){gameAudio.pause();gameAudio=null}if(gameAudioUrl)URL.revokeObjectURL(gameAudioUrl);
+  gameAudioUrl=URL.createObjectURL(record.blob);gameAudio=new Audio();gameAudio.src=gameAudioUrl;gameAudio.preload="auto";gameAudio.playbackRate=speed;
+  await gameAudio.play();gameAudio.onended=()=>finishGame("La canción terminó.");
+}
+async function startMidiGameSynth(notesByPlayer,speed){
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("Este navegador no admite reproducción de audio.");
+  gameAudioCtx=new AC({latencyHint:"interactive"});await gameAudioCtx.resume();gameAudioBase=gameAudioCtx.currentTime+.18;
+  const unique=new Map();notesByPlayer.forEach((list,index)=>{const track=Number($("duoTrack"+(index+1)).value||0);if(!unique.has(track))unique.set(track,list)});
+  unique.forEach(list=>list.forEach(n=>{const start=gameAudioBase+n.timeMs/1000/speed,duration=Math.min(3,Math.max(.07,n.durationMs/1000/speed));schedulePluck(gameAudioCtx,n.pitch,92,start,duration,gameAudioNodes)}));
+}
+function getGameTimeMs(){
+  if(!gameStarted)return 0;
+  if(gameClockMode==="audio"&&gameAudio)return gameAudio.currentTime*1000;
+  if(gameClockMode==="midi"&&gameAudioCtx)return Math.max(0,(gameAudioCtx.currentTime-gameAudioBase)*1000*gameSpeed);
+  if(gameClockMode==="gp"&&gameGpApi)return Number(gameGpApi.timePosition)||0;
+  return 0;
+}
+function registerGamePitch(index,pitch,nowMs){
+  const notes=gamePlayerNotes[index];if(!notes?.length)return;
+  let best=null,bestDelta=Infinity;
+  for(const n of notes){if(n.hit||n.miss)continue;const delta=Math.abs(n.timeMs-nowMs);if(delta<bestDelta){bestDelta=delta;best=n}if(n.timeMs>nowMs+GAME_HIT_WINDOW_MS)break}
+  if(!best||bestDelta>GAME_HIT_WINDOW_MS)return;
+  if(best.pitch===pitch){best.hit=true;gameScore[index].hits++;gameScore[index].points+=100;updateGameScore(index);$("gameResult"+(index+1)).textContent="¡Correcto! +100";$("gameResult"+(index+1)).style.color="#42dda1";}
+  else if(nowMs>=best.timeMs-GAME_HIT_WINDOW_MS){/* no penaliza otra nota mientras haya una nota objetivo en ventana */}
+}
+function updateGameScore(index){const n=index+1,s=gameScore[index],total=s.hits+s.misses,accuracy=total?Math.round(s.hits/total*100):0;$("gameScore"+n).textContent=s.points.toLocaleString("es-CO");$("gameHitRate"+n).textContent=`${s.hits} aciertos · ${s.misses} fallos`;$("duoAccuracy"+n).textContent=total?accuracy+"%":"—";$("gameTeamScore").textContent=(gameScore[0].points+gameScore[1].points).toLocaleString("es-CO")}
+function markMisses(nowMs){[0,1].forEach(i=>{if(!duoPlayers[i])return;for(const n of gamePlayerNotes[i]){if(!n.hit&&!n.miss&&nowMs>n.timeMs+GAME_HIT_WINDOW_MS){n.miss=true;gameScore[i].misses++;$("gameResult"+(i+1)).textContent="Nota no acertada";$("gameResult"+(i+1)).style.color="#ff8b78";updateGameScore(i)}}})}
+function getStringRow(note,instrument){const max=instrument.includes("Bajo")?4:6;const num=Number(note.stringNumber)||1;return Math.max(0,Math.min(max-1,max-num))}
+function drawHighway(index,nowMs){
+  const canvas=$("duoHighway"+(index+1));if(!canvas)return;const rect=canvas.getBoundingClientRect();if(rect.width<10)return;
+  const dpr=Math.min(2,window.devicePixelRatio||1),w=Math.floor(rect.width*dpr),h=Math.floor(rect.height*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
+  const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);const W=rect.width,H=rect.height;
+  const instrument=$("duoInstrument"+(index+1)).value,bass=instrument.includes("Bajo"),strings=bass?4:6,top=25,bottom=H-22,laneGap=(bottom-top)/(strings-1),hitX=Math.max(64,W*.22),pixelsPerSec=(W-hitX-30)/(GAME_LOOKAHEAD_MS/1000),notes=gamePlayerNotes[index]||[];
+  ctx.clearRect(0,0,W,H);const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,"#0a1a2b");grad.addColorStop(1,"#07101b");ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
+  // runway perspective and beat grid
+  ctx.fillStyle=index===0?"rgba(42,166,235,.08)":"rgba(255,145,65,.08)";ctx.beginPath();ctx.moveTo(hitX,top-14);ctx.lineTo(W,0);ctx.lineTo(W,H);ctx.lineTo(hitX,bottom+14);ctx.closePath();ctx.fill();
+  for(let t=0;t<=GAME_LOOKAHEAD_MS;t+=500){const x=hitX+t/1000*pixelsPerSec;ctx.strokeStyle=t===0?"rgba(255,255,255,.12)":"rgba(180,205,230,.10)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,8);ctx.lineTo(x,H-8);ctx.stroke()}
+  for(let s=0;s<strings;s++){const y=top+s*laneGap;ctx.strokeStyle=s===strings-1?"rgba(255,255,255,.55)":"rgba(160,190,215,.35)";ctx.lineWidth=s===strings-1?2:1;ctx.beginPath();ctx.moveTo(hitX,y);ctx.lineTo(W-8,y);ctx.stroke();ctx.fillStyle="rgba(210,225,240,.55)";ctx.font="9px system-ui";ctx.fillText(bass?["G","D","A","E"][s]:["e","B","G","D","A","E"][s],10,y+3)}
+  ctx.fillStyle=index===0?"#4bc1ff":"#ff9a4b";ctx.fillRect(hitX-2,8,4,H-16);ctx.fillStyle="rgba(255,255,255,.8)";ctx.font="9px system-ui";ctx.fillText("TOCA",hitX-14,12);
+  for(const note of notes){const delta=note.timeMs-nowMs;if(delta< -330||delta>GAME_LOOKAHEAD_MS)continue;const x=hitX+delta/1000*pixelsPerSec;const row=getStringRow(note,instrument),y=top+row*laneGap;const color=index===0?"#25aef7":"#ff963f";const width=Math.max(24,Math.min(42,30+Math.max(0,note.durationMs-100)*.04));
+    ctx.globalAlpha=note.hit?.45:note.miss?.28:1;ctx.shadowColor=color;ctx.shadowBlur=note.hit?0:10;ctx.fillStyle=note.hit?"#36d69b":note.miss?"#7c8795":color;roundRect(ctx,x-width/2,y-12,width,24,7);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle="#07111b";ctx.font="bold 12px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(note.fret),x,y);
+    if(note.finger){ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(x+width/2-1,y-10,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="#07111b";ctx.font="bold 8px system-ui";ctx.fillText(String(note.finger),x+width/2-1,y-10)}ctx.globalAlpha=1;ctx.textAlign="left";ctx.textBaseline="alphabetic";
+  }
+}
+function roundRect(ctx,x,y,w,h,r){if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}else{ctx.beginPath();ctx.rect(x,y,w,h)}}
+function renderGameNow(nowMs){
+  [0,1].forEach(i=>{const next=(gamePlayerNotes[i]||[]).find(n=>!n.hit&&!n.miss&&n.timeMs>=nowMs-100);if(next){$("gameTarget"+(i+1)).textContent=next.name;const inst=$("duoInstrument"+(i+1)).value,strings=inst.includes("Bajo")?["4ª · Mi","3ª · La","2ª · Re","1ª · Sol"]:["6ª · Mi","5ª · La","4ª · Re","3ª · Sol","2ª · Si","1ª · Mi agudo"];const stringLabel=next.stringNumber?strings[next.stringNumber-1]||(`Cuerda ${next.stringNumber}`):"Cuerda sugerida";$("gamePosition"+(i+1)).textContent=`${stringLabel} · Traste ${next.fret} · Dedo ${fingerName(next.finger)}`}else{$("gameTarget"+(i+1)).textContent="—";$("gamePosition"+(i+1)).textContent="Fin de pista"}drawHighway(i,nowMs)})
+}
+function gameFrame(){if(!gameStarted||gamePaused)return;const now=getGameTimeMs();markMisses(now);renderGameNow(now);$("gameClock").textContent=formatSongTime(now);const pct=gameDuration?Math.min(100,now/gameDuration*100):0;$("gameProgressBar").style.width=pct+"%";
+  if(gameClockMode==="audio"&&gameAudio?.ended){finishGame("La canción terminó.");return}
+  if(gameClockMode==="gp"&&gameGpApi&&now>=gameDuration&&gameDuration>0){finishGame("La partitura terminó.");return}
+  if(gameClockMode==="midi"&&gameAudioCtx&&now>=gameDuration+500){finishGame("La canción terminó.");return}
+  gameRAF=requestAnimationFrame(gameFrame)
+}
+function finishGame(message){if(!gameStarted)return;gameStarted=false;gamePaused=false;cancelAnimationFrame(gameRAF);if(gameClockMode==="gp"&&gameGpApi){try{gameGpApi.stop()}catch(e){}}if(gameClockMode==="audio"&&gameAudio)gameAudio.pause();if(gameClockMode==="midi"&&gameAudioCtx){gameAudioCtx.close().catch(()=>{});gameAudioCtx=null;gameAudioNodes=[];}$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;$("gameStateTag").textContent="CANCIÓN FINALIZADA";setDuoStatus(`${message} Jugador 1: ${gameScore[0].hits} aciertos de ${gameScore[0].hits+gameScore[0].misses}. Jugador 2: ${gameScore[1].hits} aciertos de ${gameScore[1].hits+gameScore[1].misses}.`)}
+function pauseGame(){if(!gameStarted)return;if(!gamePaused){gamePaused=true;gamePauseAt=performance.now();if(gameClockMode==="audio")gameAudio?.pause();else if(gameClockMode==="gp")gameGpApi?.pause();else if(gameClockMode==="midi"&&gameAudioCtx)gameAudioCtx.suspend();$("gamePauseBtn").textContent="▶ Continuar";$("gameStateTag").textContent="PAUSADO";cancelAnimationFrame(gameRAF)}else{gamePaused=false;if(gameClockMode==="audio")gameAudio?.play();else if(gameClockMode==="gp")gameGpApi?.play();else if(gameClockMode==="midi"&&gameAudioCtx)gameAudioCtx.resume();$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";gameRAF=requestAnimationFrame(gameFrame)}}
+function stopGame(stopApi=true){cancelAnimationFrame(gameRAF);gameStarted=false;gamePaused=false;if(gameAudio){gameAudio.pause();gameAudio.currentTime=0;gameAudio=null}if(gameAudioUrl){URL.revokeObjectURL(gameAudioUrl);gameAudioUrl=null}gameAudioNodes.forEach(n=>{try{n.stop()}catch(e){}});gameAudioNodes=[];if(gameAudioCtx){gameAudioCtx.close().catch(()=>{});gameAudioCtx=null}if(stopApi&&gameGpApi){try{gameGpApi.stop()}catch(e){}}gameClockMode="none";$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameClock").textContent="00:00";$("gameProgressBar").style.width="0%";if($("gameStateTag"))$("gameStateTag").textContent=gameChart?"PARTITURA LISTA":"ESPERANDO CANCIÓN"}
+function stopDuo(){stopGame();[0,1].forEach(stopDuoPlayer);setDuoStatus("Sesión detenida. Las entradas de audio se han desconectado.");toast("Sesión detenida.")}
+function onGameChartChange(){prepareGameChart($("duoSong").value)}
+$("duoConnect1").addEventListener("click",()=>connectDuoPlayer(0));$("duoConnect2").addEventListener("click",()=>connectDuoPlayer(1));
+$("duoStartBtn").addEventListener("click",startDuo);$("gamePauseBtn").addEventListener("click",pauseGame);$("duoStopBtn").addEventListener("click",stopDuo);
+$("duoSong").addEventListener("change",onGameChartChange);$("gameSpeed").addEventListener("change",()=>{$("gameTempoLabel").textContent=Math.round(Number($("gameSpeed").value)*100)+"%"});
+[1,2].forEach(n=>{$("duoInstrument"+n).addEventListener("change",()=>{updateDuoInstrumentLabels();if(gameChart?.type==="midi")refreshPlayerCharts()});$("duoTrack"+n).addEventListener("change",refreshPlayerCharts)});
+$("duoConnection").addEventListener("change",e=>{if(e.target.value==="remote"){$("duoConnectionNote").textContent="El modo remoto requiere un servidor de emparejamiento y sincronización. No está habilitado en GitHub Pages sin ese servicio."}else{$("duoConnectionNote").textContent="Para dos guitarras reales necesitas dos dispositivos de entrada independientes o una interfaz estéreo con canales separados. Un MP3 solo aporta el acompañamiento; para mostrar cuerda/traste se necesita una tablatura GP o MIDI."}});
+if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListener("devicechange",populateDuoInputs);
+window.addEventListener("resize",()=>{if(gameChart)renderGameNow(getGameTimeMs())});
 
 $("songFiles").addEventListener("change",e=>{if(e.target.files?.length)importSongFiles([...e.target.files]);e.target.value=""});
 $("songLibrary").addEventListener("click",async e=>{const open=e.target.closest("[data-open-song]"),del=e.target.closest("[data-delete-song]");if(open)await openSong(open.dataset.openSong);if(del){if(confirm("¿Eliminar esta canción de tu biblioteca local?")){await songDbAction("readwrite",{id:del.dataset.deleteSong,delete:true});await renderSongLibrary();closeSongWorkspace();toast("Canción eliminada del dispositivo.")}}});

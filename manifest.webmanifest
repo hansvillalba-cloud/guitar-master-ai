@@ -1,7 +1,7 @@
 {
   "name": "Guitar Master AI",
   "short_name": "Guitar Master",
-  "description": "Aprende guitarra tocando: afinador, diapasón y práctica interactiva.",
+  "description": "Juego de práctica de guitarra tipo note highway con tablaturas MIDI y Guitar Pro, modo de dos jugadores y audio.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
