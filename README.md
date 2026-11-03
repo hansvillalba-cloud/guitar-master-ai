@@ -1,72 +1,47 @@
-# Guitar Master AI V1.5 · Rock Engine
+# Guitar Master AI V1.6 · Carga directa desde Modo Rock
 
-Aplicación web progresiva (PWA) en español para Windows y Android. Preparada para GitHub Pages.
+V1.6 corrige la ausencia de importación visible dentro de Modo Rock. Ahora puedes seleccionar archivos desde la propia pantalla de juego; no necesitas ir primero a la biblioteca.
 
-## Qué cambia en V1.5
+## Qué cambia en V1.6
 
-La experiencia de práctica se reorganiza como un juego musical tipo *note highway*: las notas se desplazan hacia una línea de ejecución, por carriles de cuerda, con el traste y el dedo sugerido visibles. El reloj de canción mantiene sincronizadas las dos pistas.
+- Botón **Cargar canción / partitura** dentro de Modo Rock.
+- Permite seleccionar uno o varios archivos: Guitar Pro (`.gp3`, `.gp4`, `.gp5`, `.gpx`, `.gp`), MIDI (`.mid`, `.midi`), MP3 y WAV.
+- Los archivos se guardan en la biblioteca local del navegador (IndexedDB), no se suben a GitHub ni a un servidor.
+- Al terminar la importación, el MIDI/Guitar Pro más reciente de la selección queda elegido como partitura.
+- El MP3/WAV más reciente queda elegido como acompañamiento.
+- El reproductor de audio ya no cambia de pantalla cuando la importación se hace desde Modo Rock.
+- Se conserva la biblioteca de canciones; la opción **Abrir biblioteca** permite administrarlas o eliminarlas.
+- Se incrementó la versión de caché del service worker para que GitHub Pages descargue los archivos de V1.6.
 
-- Modo Rock / dos jugadores en un mismo computador.
-- Dos carriles independientes, azul para el jugador 1 y naranja para el jugador 2.
-- Cada jugador selecciona instrumento (guitarra eléctrica, acústica, clásica o bajo), entrada de audio, canal y pista de la partitura.
-- Pantalla adaptable: dos columnas en escritorio y paneles apilados en pantallas estrechas.
-- Reproducción sintetizada de MIDI y reproducción de Guitar Pro mediante alphaTab.
-- MP3/WAV opcional como acompañamiento sincronizado con la partitura MIDI/GP.
-- Evaluación de notas individuales por coincidencia de tono y proximidad temporal a la línea de ejecución.
-- Controles de iniciar, pausar, continuar y detener; velocidad de reproducción.
+## Cómo usar la carga desde Modo Rock
 
-## Cómo jugar
+1. Abre **Modo Rock**.
+2. Pulsa **Cargar canción / partitura**.
+3. Selecciona un archivo MIDI o Guitar Pro para obtener las notas, tiempos, pistas y posiciones.
+4. Opcionalmente, en el mismo diálogo selecciona también el MP3/WAV que corresponde a esa partitura. Usa Ctrl o Shift para seleccionar varios archivos.
+5. Espera el mensaje de confirmación. La partitura y el acompañamiento aparecen seleccionados en sus respectivos campos.
+6. Revisa las pistas de cada jugador, conecta las entradas de audio cuando vayas a evaluar interpretación y pulsa **Iniciar canción**.
 
-1. Abre Modo Rock.
-2. Selecciona una partitura MIDI o Guitar Pro. La aplicación incluye el ejercicio «Riff inicial en Mi» para probar el motor sin importar archivos.
-3. Para usar una canción propia, importa primero un archivo MIDI o Guitar Pro desde la biblioteca.
-4. Selecciona la pista que tocará cada jugador. Si el MIDI solo tiene una pista instrumental, ambos pueden seleccionar esa misma pista para practicarla o dividirse el trabajo con archivos que tengan pistas separadas.
-5. Opcionalmente selecciona un MP3/WAV como acompañamiento. Debe corresponder a la partitura y comenzar en el mismo punto; la app no alinea automáticamente grabaciones.
-6. Conecta cada guitarra a una entrada distinta. En una interfaz estéreo compartida, elige el canal 1 para un jugador y el canal 2 para el otro.
-7. Pulsa «Iniciar canción». También se puede iniciar la vista previa sin micrófonos, pero no se contabilizarán ejecuciones.
+## Qué aporta cada formato
 
-## Importación de canciones
+- **MIDI:** proporciona notas y tiempos para el note highway; la posición de cuerda y traste se estima en afinación estándar.
+- **Guitar Pro:** permite extraer notas, cuerdas, trastes y tiempos cuando el formato y la pista son compatibles. El lector y el SoundFont se cargan desde alphaTab CDN, por lo que se requiere internet.
+- **MP3/WAV:** se reproduce como acompañamiento. No contiene datos de tablatura por sí mismo; para que aparezcan notas en el juego debe cargarse también su MIDI o Guitar Pro correspondiente.
 
-- **MIDI (`.mid`, `.midi`):** proporciona las notas, pistas y tiempos para dibujar la pista y generar una referencia de audio sintetizada.
-- **Guitar Pro (`.gp3`, `.gp4`, `.gp5`, `.gpx`, `.gp`):** alphaTab lee la tablatura y aporta las notas, cuerdas, trastes y tiempos. Requiere conexión a internet para cargar alphaTab y su SoundFont desde CDN.
-- **MP3/WAV:** solo sirve como audio de acompañamiento. Por sí solo no contiene una tablatura utilizable por el motor; debe asociarse con una partitura MIDI o Guitar Pro.
+## Publicar en GitHub Pages
 
-## Conexiones de audio y multijugador
+1. Extrae el ZIP de V1.6.
+2. Sube el contenido completo a la raíz de tu repositorio, reemplazando `index.html`, `app.js`, `styles.css`, `sw.js` y demás archivos. Conserva `assets/` y `.nojekyll`.
+3. Haz commit en la rama `main`.
+4. Espera a que GitHub Pages termine el despliegue.
+5. Abre el sitio y recarga con `Ctrl + F5`. La caché nueva del service worker se llama `guitar-master-ai-v1-6`.
 
-- La modalidad local de dos jugadores requiere dos entradas físicas independientes o dos canales separados de una interfaz estéreo.
-- No conectes dos jugadores al mismo micrófono mono. La aplicación valida dispositivo/canal e informa cuando no puede separar las señales.
-- Dos micrófonos que capten la misma mezcla ambiental no permiten identificar qué persona tocó cada nota. Para mejores resultados usa entradas directas e independientes y audífonos.
-- **Dos dispositivos diferentes todavía no pueden emparejarse.** La opción remota está deshabilitada porque requiere un servicio de emparejamiento y sincronización; GitHub Pages por sí solo aloja archivos estáticos.
+## Verificación realizada
 
-## Límites actuales
+- `node --check app.js` sin errores de sintaxis.
+- Comprobación de IDs HTML: no hay IDs duplicados.
+- Comprobación estática de los controles y manejadores de importación desde Modo Rock.
+- Verificación de que el importador devuelve los identificadores creados y puede evitar la apertura del reproductor de biblioteca cuando se carga desde Modo Rock.
+- El ZIP se crea desde la raíz del proyecto y se vuelve a abrir para verificar su contenido.
 
-- La detección de ejecución es monofónica: comprueba notas individuales, no acordes completos.
-- No separa guitarra, bajo, voz y batería de una mezcla MP3/WAV.
-- La digitación para notas MIDI se calcula como una posición sugerida; las tablaturas Guitar Pro pueden proporcionar digitación explícita.
-- La puntuación evalúa tono y ventana temporal; todavía no mide técnicas avanzadas como bends, slides, vibrato, palm mute o duración exacta de cada nota.
-- La sincronización de un MP3/WAV con la tablatura depende de que ambos archivos estén alineados desde el mismo inicio y de que el tempo corresponda.
-- El rendimiento y la latencia dependen de la interfaz, controlador, navegador y computador. Deben calibrarse con el instrumento real.
-- La biblioteca se guarda localmente en el navegador. No se sincroniza automáticamente entre dispositivos.
-
-## Requisitos
-
-- Chrome o Edge actualizado en Windows; Chrome actualizado en Android.
-- HTTPS o `localhost` para acceder al micrófono/interfaz de audio. GitHub Pages utiliza HTTPS.
-- Permisos de micrófono concedidos.
-- Conexión a internet para el lector Guitar Pro (alphaTab y SoundFont).
-
-## Publicar o actualizar en GitHub Pages
-
-1. Descarga y extrae el ZIP de V1.5.
-2. Sube el **contenido** de la carpeta a la raíz del repositorio, reemplazando los archivos anteriores: `index.html`, `app.js`, `styles.css`, `sw.js`, `manifest.webmanifest`, `.nojekyll`, los archivos README/licencias y la carpeta `assets/`.
-3. Confirma los cambios en la rama `main`.
-4. En **Settings → Pages**, comprueba que la fuente sea `main` y la carpeta `/ (root)`.
-5. Abre la dirección de GitHub Pages y fuerza una recarga con `Ctrl + F5`. Si estaba instalada como PWA, cierra la ventana instalada y vuelve a abrir el sitio para que se active el nuevo service worker.
-
-## Verificación
-
-La versión distribuida pasó `node --check`, comprobación de identificadores HTML duplicados y referencias estáticas a controles, prueba del parser MIDI y del cálculo de posición de notas, y prueba del ZIP. También se automatizó una comprobación en navegador con el ejercicio incorporado: se inició el reloj, se dibujaron los carriles de notas, avanzó la animación y los controles de pausa/continuación respondieron sin errores JavaScript. Esto verifica la vista previa y el motor visual; **no sustituye la prueba con guitarras e interfaces físicas**, que depende del equipo del usuario.
-
-## Privacidad y licencias
-
-Los archivos importados se procesan y almacenan en el navegador del usuario; no se envían automáticamente a un servidor de Guitar Master AI ni se suben a GitHub. No publiques canciones comerciales o tablaturas protegidas en un repositorio público si no tienes derechos para compartirlas. El lector Guitar Pro utiliza alphaTab bajo licencia MPL-2.0; consulta `THIRD_PARTY_NOTICES.md`.
+La prueba local de carga de archivos reales depende del navegador y de los archivos que selecciones. El MP3/WAV no se convierte automáticamente en tablatura.

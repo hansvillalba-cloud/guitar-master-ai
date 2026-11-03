@@ -122,6 +122,18 @@
               <select id="duoSong"><option value="">Selecciona MIDI o Guitar Pro</option></select>
             </label>
           </div>
+          <div class="rock-upload-strip">
+            <div class="rock-upload-copy">
+              <p class="eyebrow">CARGAR DESDE ESTA PANTALLA</p>
+              <strong>¿Vas a tocar una canción propia?</strong>
+              <small>Importa aquí tu partitura Guitar Pro o MIDI. También puedes seleccionar el MP3/WAV de acompañamiento en el mismo proceso.</small>
+            </div>
+            <label class="btn btn-primary rock-upload-button" for="rockSongFiles">＋ Cargar canción / partitura
+              <input id="rockSongFiles" type="file" multiple accept=".gp3,.gp4,.gp5,.gpx,.gp,.mid,.midi,.mp3,.wav,audio/mpeg,audio/wav,audio/x-wav">
+            </label>
+            <button class="btn btn-secondary btn-small" type="button" data-go="songs">Abrir biblioteca</button>
+          </div>
+          <p class="rock-upload-status" id="rockUploadStatus" role="status">Aún puedes probar el ejercicio incluido. Tus archivos importados aparecerán en los selectores de esta pantalla.</p>
           <div class="duo-config-grid game-source-grid">
             <label class="field-label">Audio original MP3/WAV (opcional)
               <select id="gameBacking"><option value="">Usar audio sintetizado de la partitura</option></select>
@@ -199,7 +211,7 @@
         <div class="lesson-list" id="lessonList"></div>
       </section>
     </main>
-    <footer><span>GUITAR MASTER AI <b>V1.5</b></span><span>Hecho para aprender tocando · Audio procesado localmente</span></footer>
+    <footer><span>GUITAR MASTER AI <b>V1.6</b></span><span>Hecho para aprender tocando · Audio procesado localmente</span></footer>
   </div>
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.9.0/dist/alphaTab.min.js"></script>

@@ -234,8 +234,8 @@ async function songDbAction(mode,record){
 function songExt(name){return (name.split(".").pop()||"").toLowerCase()}
 function songType(ext){if(["gp3","gp4","gp5","gpx","gp"].includes(ext))return "guitarpro";if(["mid","midi"].includes(ext))return "midi";if(["mp3","wav"].includes(ext))return "audio";return "unknown"}
 function prettySize(bytes){if(bytes<1024*1024)return (bytes/1024).toFixed(0)+" KB";return (bytes/1024/1024).toFixed(1)+" MB"}
-async function importSongFiles(files){
-  const accepted=["gp3","gp4","gp5","gpx","gp","mid","midi","mp3","wav"];let singleAudioId=null;
+async function importSongFiles(files,options={}){
+  const accepted=["gp3","gp4","gp5","gpx","gp","mid","midi","mp3","wav"];let singleAudioId=null;const importedIds=[];
   for(const file of files){
     const ext=songExt(file.name),type=songType(ext);
     if(!accepted.includes(ext)){toast("Formato no compatible: "+file.name);continue}
@@ -247,12 +247,14 @@ async function importSongFiles(files){
         if(!record.parsed.notes.length)throw new Error("No se encontraron notas MIDI.");
       }
       await songDbAction("readwrite",record);
+      importedIds.push(record.id);
       if(files.length===1&&type==="audio")singleAudioId=record.id;
       toast("Agregada: "+file.name);
     }catch(e){console.error(e);toast("No se pudo importar "+file.name+": "+(e.message||"archivo inválido"))}
   }
   await renderSongLibrary();
-  if(singleAudioId)await openSong(singleAudioId);
+  if(singleAudioId&&options.openSingleAudio!==false)await openSong(singleAudioId);
+  return importedIds;
 }
 function parseMidi(buffer){
   const v=new DataView(buffer);let pos=0;
@@ -424,16 +426,19 @@ function midiTrackIndexes(song){const set=new Set((song.parsed?.notes||[]).map(n
 function updateTrackPickers(items){
   [1,2].forEach(n=>{const select=$("duoTrack"+n),old=select.value;select.innerHTML=items.map((it,i)=>`<option value="${it.index}">${escapeHtml(it.name||("Pista "+(i+1)))}</option>`).join("")||'<option value="0">Sin pistas</option>';if([...select.options].some(o=>o.value===old))select.value=old;});
 }
-async function initDuoView(){
+async function initDuoView(preferred={}){
   updateDuoInstrumentLabels();
   try{duoRecords=await songDbAction("readonly")}catch(e){duoRecords=[];setDuoStatus("No se pudo abrir la biblioteca local: "+(e.message||e))}
   const charts=[...BUILTIN_SONGS,...duoRecords.filter(r=>r.type==="midi"||r.type==="guitarpro")];
   const select=$("duoSong"),previous=select.value;
   select.innerHTML='<option value="">Selecciona MIDI o Guitar Pro</option>'+charts.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio":" · "+r.ext.toUpperCase()}</option>`).join("");
-  if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;else select.value=BUILTIN_SONGS[0].id;
+  if(preferred.chartId&&[...select.options].some(o=>o.value===preferred.chartId))select.value=preferred.chartId;
+  else if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;
+  else select.value=BUILTIN_SONGS[0].id;
   const backs=duoRecords.filter(r=>r.type==="audio"),back=$("gameBacking"),oldBack=back.value;
   back.innerHTML='<option value="">Usar audio sintetizado de la partitura</option>'+backs.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)} · ${r.ext.toUpperCase()}</option>`).join("");
-  if(oldBack&&[...back.options].some(o=>o.value===oldBack))back.value=oldBack;
+  if(preferred.backingId&&[...back.options].some(o=>o.value===preferred.backingId))back.value=preferred.backingId;
+  else if(oldBack&&[...back.options].some(o=>o.value===oldBack))back.value=oldBack;
   await populateDuoInputs();
   if(select.value)await prepareGameChart(select.value);
 }
@@ -645,6 +650,21 @@ if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListe
 window.addEventListener("resize",()=>{if(gameChart)renderGameNow(getGameTimeMs())});
 
 $("songFiles").addEventListener("change",e=>{if(e.target.files?.length)importSongFiles([...e.target.files]);e.target.value=""});
+$("rockSongFiles").addEventListener("change",async e=>{
+  const files=[...(e.target.files||[])];e.target.value="";if(!files.length)return;
+  const status=$("rockUploadStatus");status.textContent="Importando archivos y preparando los selectores de Modo Rock…";
+  try{
+    const ids=await importSongFiles(files,{openSingleAudio:false});
+    const imported=await Promise.all(ids.map(id=>songDbAction("readonly",{id})));
+    const chart=[...imported].reverse().find(r=>r&&(r.type==="midi"||r.type==="guitarpro"));
+    const backing=[...imported].reverse().find(r=>r&&r.type==="audio");
+    await initDuoView({chartId:chart?.id,backingId:backing?.id});
+    if(chart&&backing)status.textContent=`Listo: ${chart.name} quedó como partitura y ${backing.name} como acompañamiento. Comprueba que ambos empiecen en el mismo punto.`;
+    else if(chart)status.textContent=`Partitura cargada: ${chart.name}. Ya está seleccionada en «Partitura / archivo de notas». Pulsa «Iniciar canción» cuando el motor termine de prepararla.`;
+    else if(backing)status.textContent=`Audio cargado: ${backing.name}. Quedó seleccionado como acompañamiento. Para mostrar notas, cuerda y traste debes importar también una partitura MIDI o Guitar Pro.`;
+    else status.textContent=ids.length?"Archivos importados. Revisa la biblioteca y los selectores.":"No se importó ningún archivo. Comprueba el formato y vuelve a intentarlo.";
+  }catch(err){console.error(err);status.textContent="No se pudo completar la importación: "+(err.message||err);toast("Error al cargar archivos: "+(err.message||err));}
+});
 $("songLibrary").addEventListener("click",async e=>{const open=e.target.closest("[data-open-song]"),del=e.target.closest("[data-delete-song]");if(open)await openSong(open.dataset.openSong);if(del){if(confirm("¿Eliminar esta canción de tu biblioteca local?")){await songDbAction("readwrite",{id:del.dataset.deleteSong,delete:true});await renderSongLibrary();closeSongWorkspace();toast("Canción eliminada del dispositivo.")}}});
 $("closeSongBtn").addEventListener("click",closeSongWorkspace);$("midiPlayBtn").addEventListener("click",playMidi);$("midiStopBtn").addEventListener("click",()=>stopMidiPlayback("Reproducción detenida."));
 $("midiPracticeBtn").addEventListener("click",()=>{if(!currentMidiNotes.length)return;songPracticeMode=true;songPracticeNotes=currentMidiNotes;songPracticeIndex=0;setExercise();showView("practice");setFeedback("Toca la primera nota de la canción",false);toast("Modo práctica de canción activado. Conecta el audio para evaluar tus notas.")});

@@ -57,3 +57,15 @@
 .game-stage .duo-stage-head{margin-bottom:9px}.game-stage .hint{margin:12px 0 0}.remote-preview{opacity:.55}
 @media(max-width:900px){.game-player-grid{grid-template-columns:1fr}.note-highway{height:270px}}
 @media(max-width:600px){.duo-config-grid,.duo-player-grid{grid-template-columns:1fr}.duo-stage-head{align-items:flex-start;flex-direction:column}.game-transport>*{flex:1}.game-clock{margin-left:0;justify-content:center}.note-highway{height:240px}.game-player-heading>small{grid-column:1/3;grid-row:3;text-align:left}.game-scoreboard{grid-template-columns:1fr 1fr}.game-scoreboard .team-score{grid-column:1/-1;grid-row:1}}
+
+
+/* V1.6 · Importar canciones directamente desde Modo Rock */
+.rock-upload-strip{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:15px 0 5px;padding:15px 16px;background:linear-gradient(105deg,#102a40,#172234);border:1px dashed #37769b;border-radius:13px}
+.rock-upload-copy{display:flex;flex:1 1 300px;flex-direction:column;gap:4px}
+.rock-upload-copy .eyebrow{margin:0;color:#61c7ff}
+.rock-upload-copy strong{font-size:14px;color:#f0f6fc}
+.rock-upload-copy small{font-size:11px;line-height:1.5;color:#aebed0}
+.rock-upload-button{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.rock-upload-button input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.rock-upload-status{margin:7px 2px 12px;color:#a9bed1;font-size:11px;line-height:1.55;min-height:17px}
+@media(max-width:600px){.rock-upload-strip{align-items:stretch}.rock-upload-strip>*{width:100%}.rock-upload-button{white-space:normal}}
