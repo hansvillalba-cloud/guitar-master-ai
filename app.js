@@ -170,17 +170,96 @@ function renderStats(){
   $("statSessions").textContent=stats.sessions;$("statMinutes").textContent=stats.minutes;$("statAccuracy").textContent=stats.totalAttempts?stats.accuracy+"%":"—";
   const p=Math.min(100,stats.sessions*10);$("progressBar").style.width=p+"%";$("progressText").textContent=stats.sessions?`${stats.sessions} sesiones completadas. Sigue practicando para avanzar.`:"Completa tu primera práctica para comenzar.";
 }
+const CHORD_SHAPES={
+  C:{name:"Do mayor",root:0,tones:[0,4,7],intervals:["R","3","5"],shape:[0,1,0,2,3,null],fingers:[0,1,0,2,3,null],hint:"C: 5ª cuerda traste 3 (Do), 4ª traste 2 (Mi), 3ª al aire (Sol), 2ª traste 1 (Do), 1ª al aire (Mi). Evita tocar la 6ª cuerda."},
+  A:{name:"La mayor",root:9,tones:[9,1,4],intervals:["R","3","5"],shape:[0,2,2,2,0,null],fingers:[0,3,2,1,0,null],hint:"A: coloca índice, medio y anular en los trastes 2 de las cuerdas 4, 3 y 2. Toca desde la 5ª cuerda."},
+  G:{name:"Sol mayor",root:7,tones:[7,11,2],intervals:["R","3","5"],shape:[3,0,0,0,2,3],fingers:[4,0,0,0,1,3],hint:"G: usa el índice en 5ª cuerda traste 2, medio en 6ª traste 3 y anular o meñique en 1ª traste 3."},
+  E:{name:"Mi mayor",root:4,tones:[4,8,11],intervals:["R","3","5"],shape:[0,0,1,2,2,0],fingers:[0,0,1,3,2,0],hint:"E: índice en 3ª cuerda traste 1; medio y anular en los trastes 2 de las cuerdas 5 y 4. Suenan las seis cuerdas."},
+  D:{name:"Re mayor",root:2,tones:[2,6,9],intervals:["R","3","5"],shape:[2,3,2,0,null,null],fingers:[1,3,2,0,null,null],hint:"D: índice en 1ª cuerda traste 2, anular en 2ª traste 3 y medio en 3ª traste 2. Toca desde la 4ª cuerda."},
+  Am:{name:"La menor",root:9,tones:[9,0,4],intervals:["R","b3","5"],shape:[0,1,2,2,0,null],fingers:[0,1,3,2,0,null],hint:"Am: es la forma de A mayor bajando un semitono la tercera. Toca desde la 5ª cuerda."},
+  Em:{name:"Mi menor",root:4,tones:[4,7,11],intervals:["R","b3","5"],shape:[0,0,0,2,2,0],fingers:[0,0,0,2,3,0],hint:"Em: dos dedos en el traste 2 de las cuerdas 5 y 4. Las seis cuerdas pueden sonar."},
+  Dm:{name:"Re menor",root:2,tones:[2,5,9],intervals:["R","b3","5"],shape:[1,3,2,0,null,null],fingers:[1,3,2,0,null,null],hint:"Dm: índice en 1ª traste 1, anular en 2ª traste 3 y medio en 3ª traste 2. Toca desde la 4ª cuerda."},
+  F:{name:"Fa mayor con cejilla",root:5,tones:[5,9,0],intervals:["R","3","5"],shape:[1,1,2,3,3,1],fingers:[1,1,2,4,3,1],hint:"F: índice hace cejilla en el traste 1. Medio en 3ª traste 2; anular y meñique en 5ª y 4ª trastes 3."},
+  Bm:{name:"Si menor con cejilla",root:11,tones:[11,2,6],intervals:["R","b3","5"],shape:[2,3,4,4,2,null],fingers:[1,2,4,3,1,null],hint:"Bm: cejilla con índice en el traste 2 desde la 5ª cuerda; anular y meñique completan los trastes 4."},
+  A7:{name:"La séptima",root:9,tones:[9,1,4,7],intervals:["R","3","5","b7"],shape:[0,2,0,2,0,null],fingers:[0,2,0,3,0,null],hint:"A7: compara su sonido con A mayor. La séptima menor (Sol) le da tensión de dominante."},
+  D7:{name:"Re séptima",root:2,tones:[2,6,9,0],intervals:["R","3","5","b7"],shape:[2,1,2,0,null,null],fingers:[3,1,2,0,null,null],hint:"D7: forma abierta muy útil en blues y rock clásico. Toca desde la 4ª cuerda."},
+  E7:{name:"Mi séptima",root:4,tones:[4,8,11,2],intervals:["R","3","5","b7"],shape:[0,0,1,0,2,0],fingers:[0,0,1,0,2,0],hint:"E7: cambia E mayor levantando el dedo de la 4ª cuerda; suena la séptima menor Re."},
+  G7:{name:"Sol séptima",root:7,tones:[7,11,2,5],intervals:["R","3","5","b7"],shape:[1,0,0,0,2,3],fingers:[1,0,0,0,2,3],hint:"G7: añade Fa (b7) en la primera cuerda, traste 1. Resuelve con facilidad hacia Do."},
+  C7:{name:"Do séptima",root:0,tones:[0,4,7,10],intervals:["R","3","5","b7"],shape:[0,1,3,2,3,null],fingers:[0,1,4,2,3,null],hint:"C7: agrega Si bemol (b7) al acorde de Do. Es frecuente en blues y rock and roll."},
+  Cmaj7:{name:"Do mayor séptima",root:0,tones:[0,4,7,11],intervals:["R","3","5","7"],shape:[0,0,0,2,3,null],fingers:[0,0,0,1,3,null],hint:"Cmaj7: forma abierta x32000. Tiene un color más suave y estable que C7."},
+  Am7:{name:"La menor séptima",root:9,tones:[9,0,4,7],intervals:["R","b3","5","b7"],shape:[0,1,0,2,0,null],fingers:[0,1,0,2,0,null],hint:"Am7: forma abierta x02010. Muy común en progresiones de pop, blues y rock."},
+  Em7:{name:"Mi menor séptima",root:4,tones:[4,7,11,2],intervals:["R","b3","5","b7"],shape:[0,0,0,0,2,0],fingers:[0,0,0,0,2,0],hint:"Em7: forma abierta 020000. Compara su color con Em."},
+  Dm7:{name:"Re menor séptima",root:2,tones:[2,5,9,0],intervals:["R","b3","5","b7"],shape:[1,1,2,0,null,null],fingers:[1,1,2,0,null,null],hint:"Dm7: forma abierta xx0211. Mantén el índice plano sobre las dos primeras cuerdas."},
+  Dsus2:{name:"Re suspendido 2",root:2,tones:[2,4,9],intervals:["R","2","5"],shape:[0,3,2,0,null,null],fingers:[0,3,2,0,null,null],hint:"Dsus2: forma xx0230. La segunda sustituye a la tercera y deja el acorde abierto."},
+  Dsus4:{name:"Re suspendido 4",root:2,tones:[2,7,9],intervals:["R","4","5"],shape:[3,3,2,0,null,null],fingers:[3,4,2,0,null,null],hint:"Dsus4: forma xx0233. Resuelve fácilmente hacia D mayor."},
+  Asus2:{name:"La suspendido 2",root:9,tones:[9,11,4],intervals:["R","2","5"],shape:[0,0,2,2,0,null],fingers:[0,0,2,3,0,null],hint:"Asus2: forma x02200. Suena abierta y funciona muy bien en rock acústico."},
+  Esus4:{name:"Mi suspendido 4",root:4,tones:[4,9,11],intervals:["R","4","5"],shape:[0,0,2,2,2,0],fingers:[0,0,1,2,3,0],hint:"Esus4: forma 022200. Alterna con E mayor para escuchar la resolución."},
+  FsharpMinor:{name:"Fa sostenido menor con cejilla",root:6,tones:[6,9,1],intervals:["R","b3","5"],shape:[2,2,2,4,4,2],fingers:[1,1,1,3,4,1],hint:"F#m: cejilla en el traste 2 y forma de Em desplazada. Usa solo la fuerza necesaria."},
+  CsharpMinor:{name:"Do sostenido menor con cejilla",root:1,tones:[1,4,8],intervals:["R","b3","5"],shape:[4,5,6,6,4,null],fingers:[1,2,4,3,1,null],hint:"C#m: forma móvil de Am en el traste 4, con cejilla desde la quinta cuerda."},
+  Gm:{name:"Sol menor con cejilla",root:7,tones:[7,10,2],intervals:["R","b3","5"],shape:[3,3,3,5,5,3],fingers:[1,1,1,3,4,1],hint:"Gm: forma móvil de Em en el traste 3, con cejilla completa."},
+  E5:{name:"Mi quinta (power chord)",root:4,tones:[4,11],intervals:["R","5"],shape:[null,null,null,null,2,0],fingers:[null,null,null,null,1,0],hint:"E5: quinta sin tercera. Es la forma base de muchos riffs de hard rock y metal; no define mayor o menor."}
+};
+const SCALE_INTERVALS={minorPent:[0,3,5,7,10],majorPent:[0,2,4,7,9],major:[0,2,4,5,7,9,11],blues:[0,3,5,6,7,10]};
+const CHROMA_NAMES=["Do","Do♯","Re","Re♯","Mi","Fa","Fa♯","Sol","Sol♯","La","La♯","Si"];
+function playFretTone(midi,delay=0,duration=.42){
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    audioCtx.resume();const t=audioCtx.currentTime+delay,o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type="triangle";o.frequency.setValueAtTime(midiToFreq(midi),t);
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.16,t+.012);g.gain.exponentialRampToValueAtTime(.0001,t+duration);
+    o.connect(g).connect(audioCtx.destination);o.start(t);o.stop(t+duration+.02);
+  }catch(err){console.warn("No se pudo reproducir la nota del diapasón",err);$("fretAudioStatus").textContent="El navegador no permitió reproducir audio.";}
+}
+function playFretSelection(){
+  const mode=$("fretMode").value;let pitches=[];
+  if(mode==="chords"){
+    const ch=CHORD_SHAPES[$("fretChord").value]||CHORD_SHAPES.C;
+    pitches=ch.shape.map((f,i)=>f===null?null:STRINGS[i].midi+f).filter(Number.isFinite).reverse();
+    pitches.forEach((m,i)=>playFretTone(m,i*.075,.55));
+    $("fretAudioStatus").textContent="Escuchando el arpegio de "+ch.name+".";
+  }else if(mode==="scales"){
+    const r=+$ ("fretRoot").value,steps=SCALE_INTERVALS[$("fretScale").value]||SCALE_INTERVALS.minorPent;
+    pitches=steps.map(n=>48+((r+n)%12));
+    pitches.forEach((m,i)=>playFretTone(m,i*.16,.28));
+    $("fretAudioStatus").textContent="Escuchando la escala ascendente.";
+  }else{
+    $("fretAudioStatus").textContent="Selecciona una nota del mástil para escucharla.";
+  }
+}
 function renderFretboard(){
-  const root=40,frets=12,view=$("fretView").value;
+  const root=40,frets=12,view=$("fretView").value,mode=$("fretMode").value;
+  const chord=CHORD_SHAPES[$("fretChord").value]||CHORD_SHAPES.C;
+  const scaleKey=$("fretScale").value,scaleRoot=+$ ("fretRoot").value,scaleNotes=SCALE_INTERVALS[scaleKey]||SCALE_INTERVALS.minorPent;
+  $("fretChordWrap").hidden=mode!=="chords";$("fretScaleWrap").hidden=mode!=="scales";$("fretRootWrap").hidden=mode!=="scales";
+  $("fretLegend").innerHTML=mode==="chords"?'<span><i class="legend-root"></i> Tónica (R)</span><span><i class="legend-tone"></i> Tercera / quinta / séptima</span><span><i class="legend-finger">1</i> Dedo en la forma</span>':mode==="scales"?'<span><i class="legend-root"></i> Tónica</span><span><i class="legend-tone"></i> Nota de la escala</span>':'<span><i class="legend-root"></i> Mi</span><span>Selecciona una nota para consultar su posición y escucharla.</span>';
   let html='<div class="fret-label">CUERDA</div>';for(let f=0;f<=frets;f++)html+=`<div class="fret-label">${f===0?"AL AIRE":f}</div>`;
-  STRINGS.forEach((s,idx)=>{
+  STRINGS.forEach((str,idx)=>{
     html+=`<div class="fret-label">${["e","B","G","D","A","E"][idx]}</div>`;
-    for(let f=0;f<=frets;f++){const midi=s.midi+f,note=midiName(midi).replace(/[0-9]/g,""),label=view==="notes"?note:String((midi-root+120)%12);html+=`<div class="fret-cell"><button class="${midi%12===4?"root":""}" data-midi="${midi}" data-string="${idx}" data-fret="${f}" title="${note} · traste ${f}">${label}</button></div>`}
+    for(let f=0;f<=frets;f++){
+      const midi=str.midi+f,pc=midi%12,note=midiName(midi).replace(/[0-9]/g,""),shapeFret=mode==="chords"?chord.shape[idx]:null;
+      const isChordTone=mode==="chords"&&chord.tones.includes(pc),isScaleTone=mode==="scales"&&scaleNotes.some(v=>(v+scaleRoot)%12===pc);
+      const isRoot=mode==="chords"?pc===chord.root:(mode==="scales"?pc===scaleRoot:pc===4);
+      const inShape=mode==="chords"&&shapeFret!==null&&shapeFret!==undefined&&shapeFret===f;
+      const finger=inShape?chord.fingers[idx]:null;
+      let label=view==="numbers"?String(mode==="chords"?chord.tones.indexOf(pc)>=0?chord.intervals[chord.tones.indexOf(pc)]:"·":mode==="scales"?scaleNotes.indexOf((pc-scaleRoot+12)%12)+1||"·":(midi-root+120)%12):note;
+      let cls="";if(isRoot)cls+=" root";else if(isChordTone||isScaleTone)cls+=" tone";if(inShape)cls+=" shape";
+      const text=inShape&&finger>0?String(finger):label;
+      html+=`<div class="fret-cell"><button class="${cls.trim()}" data-midi="${midi}" data-string="${idx}" data-fret="${f}" title="${note} · cuerda ${6-idx} · traste ${f}${finger>0?" · dedo "+finger:""}">${text}</button></div>`;
+    }
   });
   $("fretboard").innerHTML=html;
-  $("fretboard").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{$("fretExplain").textContent=`${midiName(+b.dataset.midi)} · ${STRINGS[+b.dataset.string].label} · Traste ${b.dataset.fret}. Frecuencia aproximada: ${midiToFreq(+b.dataset.midi).toFixed(2)} Hz.`}));
+  if(mode==="chords")$("fretExplain").innerHTML=`<strong>${chord.name} (${ $("fretChord").value })</strong><br>${chord.hint}<br><span class="muted">Notas del acorde: ${chord.tones.map(v=>CHROMA_NAMES[v]).join(" · ")}. En los puntos de la forma, el número indica el dedo recomendado (1 índice, 2 medio, 3 anular, 4 meñique; 0 cuerda al aire).</span>`;
+  else if(mode==="scales")$("fretExplain").innerHTML=`<strong>${$("fretScale").selectedOptions[0].text} de ${CHROMA_NAMES[scaleRoot]}</strong><br>Notas: ${scaleNotes.map(v=>CHROMA_NAMES[(v+scaleRoot)%12]).join(" · ")}. La tónica aparece en naranja y las demás notas de la escala en azul.`;
+  else $("fretExplain").textContent="Vista de notas: recorre el mástil de la cuerda 6 (Mi grave) a la 1 (Mi agudo). Pulsa cualquier punto para conocer nombre, cuerda, traste y frecuencia.";
+  $("fretboard").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    const midi=+b.dataset.midi,idx=+b.dataset.string,fret=+b.dataset.fret;
+    const pc=midi%12,role=mode==="chords"?chord.intervals[chord.tones.indexOf(pc)]||"nota externa":mode==="scales"?(scaleNotes.includes((pc-scaleRoot+12)%12)?"nota de la escala":"fuera de escala"):"nota natural";
+    $("fretExplain").innerHTML=`<strong>${midiName(midi)} · ${STRINGS[idx].label} · traste ${fret}</strong><br>Frecuencia aproximada: ${midiToFreq(midi).toFixed(2)} Hz · ${role}.`;
+    playFretTone(midi);$("fretAudioStatus").textContent="Reproduciendo "+midiName(midi)+".";
+  }));
 }
-$("fretView").addEventListener("change",renderFretboard);
+["fretView","fretMode","fretChord","fretScale","fretRoot"].forEach(id=>$(id).addEventListener("change",renderFretboard));
+$("fretPlayBtn").addEventListener("click",playFretSelection);
 const lessons=[
 ["Conoce tu guitarra","Identifica cuerpo, mástil, puente, clavijero, trastes y las seis cuerdas.","Conceptos básicos"],
 ["Afinación estándar","Aprende el orden Mi–La–Re–Sol–Si–Mi y utiliza el afinador.","Afinación"],
@@ -206,6 +285,8 @@ const SONG_DB = "guitar-master-ai-library";
 const SONG_STORE = "songs";
 let songDbPromise = null, alphaTabApi = null, currentSongAudioUrl = null, midiAudioContext = null, midiPlaybackTimers = [], midiPlaybackNodes = [];
 let currentMidiNotes = [];
+let currentSongId=null,currentSongType=null,activeAudioSectionHandler=null,activeAudioEndedHandler=null,midiPlaybackMeta=null,midiSectionLoopTimer=null;
+const SECTION_STORAGE_KEY="gmai_song_sections_v1";
 const GUITAR_STRINGS_LOW=[{midi:40,name:"6ª · Mi grave"},{midi:45,name:"5ª · La"},{midi:50,name:"4ª · Re"},{midi:55,name:"3ª · Sol"},{midi:59,name:"2ª · Si"},{midi:64,name:"1ª · Mi agudo"}];
 const BUILTIN_SONGS = [
   {id:"builtin:riff-mi",name:"Riff inicial en Mi",ext:"EJERCICIO",type:"midi",size:0,parsed:makeBuiltinMidi([40,40,43,45,47,45,43,40,40,43,45,43,40],260,180,100)},
@@ -234,8 +315,8 @@ async function songDbAction(mode,record){
 function songExt(name){return (name.split(".").pop()||"").toLowerCase()}
 function songType(ext){if(["gp3","gp4","gp5","gpx","gp"].includes(ext))return "guitarpro";if(["mid","midi"].includes(ext))return "midi";if(["mp3","wav"].includes(ext))return "audio";return "unknown"}
 function prettySize(bytes){if(bytes<1024*1024)return (bytes/1024).toFixed(0)+" KB";return (bytes/1024/1024).toFixed(1)+" MB"}
-async function importSongFiles(files,options={}){
-  const accepted=["gp3","gp4","gp5","gpx","gp","mid","midi","mp3","wav"];let singleAudioId=null;const importedIds=[];
+async function importSongFiles(files){
+  const accepted=["gp3","gp4","gp5","gpx","gp","mid","midi","mp3","wav"];let singleAudioId=null;
   for(const file of files){
     const ext=songExt(file.name),type=songType(ext);
     if(!accepted.includes(ext)){toast("Formato no compatible: "+file.name);continue}
@@ -247,14 +328,12 @@ async function importSongFiles(files,options={}){
         if(!record.parsed.notes.length)throw new Error("No se encontraron notas MIDI.");
       }
       await songDbAction("readwrite",record);
-      importedIds.push(record.id);
       if(files.length===1&&type==="audio")singleAudioId=record.id;
       toast("Agregada: "+file.name);
     }catch(e){console.error(e);toast("No se pudo importar "+file.name+": "+(e.message||"archivo inválido"))}
   }
   await renderSongLibrary();
-  if(singleAudioId&&options.openSingleAudio!==false)await openSong(singleAudioId);
-  return importedIds;
+  if(singleAudioId)await openSong(singleAudioId);
 }
 function parseMidi(buffer){
   const v=new DataView(buffer);let pos=0;
@@ -265,11 +344,14 @@ function parseMidi(buffer){
   if(readStr(4)!=="MThd")throw new Error("El archivo no tiene una cabecera MIDI válida.");
   const headerLen=readU32();const format=readU16(),trackCount=readU16(),division=readU16();pos=8+headerLen;
   if(division&0x8000)throw new Error("MIDI con división SMPTE no compatible en esta versión.");
-  const all=[],tempos=[{tick:0,us:500000}];
+  const all=[],tempos=[{tick:0,us:500000}],markers=[];
   for(let track=0;track<trackCount&&pos<v.byteLength;track++){
     if(readStr(4)!=="MTrk")throw new Error("Pista MIDI dañada.");const len=readU32(),end=pos+len;let tick=0,running=0;const active=new Map();
     while(pos<end){tick+=readVar();let status=v.getUint8(pos++);if(status<0x80){pos--;status=running}else running=status;
-      if(status===0xff){const type=v.getUint8(pos++),n=readVar();if(type===0x51&&n===3){const us=(v.getUint8(pos)<<16)|(v.getUint8(pos+1)<<8)|v.getUint8(pos+2);tempos.push({tick,us})}pos+=n;continue}
+      if(status===0xff){const type=v.getUint8(pos++),n=readVar();
+        if(type===0x51&&n===3){const us=(v.getUint8(pos)<<16)|(v.getUint8(pos+1)<<8)|v.getUint8(pos+2);tempos.push({tick,us})}
+        else if(type===0x06||type===0x01){const bytes=new Uint8Array(buffer,pos,n);let text="";try{text=new TextDecoder().decode(bytes).replace(/[\x00-\x1f]+/g," ").trim()}catch(e){text=String.fromCharCode(...bytes).trim()}if(text)markers.push({tick,text})}
+        pos+=n;continue}
       if(status===0xf0||status===0xf7){pos+=readVar();continue}
       const kind=status&0xf0,channel=status&0x0f,a=v.getUint8(pos++),needsTwo=![0xc0,0xd0].includes(kind),b=needsTwo?v.getUint8(pos++):0;
       if(kind===0x90&&b>0){if(channel===9)continue;const key=channel+":"+a;if(!active.has(key))active.set(key,[]);active.get(key).push({tick,pitch:a,velocity:b,channel,track})}
@@ -281,7 +363,9 @@ function parseMidi(buffer){
   const tickMs=tick=>{let ms=0,lastTick=0,us=500000;for(const t of tempos){if(t.tick>tick)break;ms+=(t.tick-lastTick)*us/division/1000;lastTick=t.tick;us=t.us}return ms+(tick-lastTick)*us/division/1000};
   const notes=all.map(n=>{const position=bestGuitarPosition(n.pitch);return {...n,startMs:tickMs(n.tick),durationMs:Math.max(70,tickMs(n.endTick)-tickMs(n.tick)),name:midiName(n.pitch),position}}).sort((a,b)=>a.startMs-b.startMs);
   const tempo=tempos[0]?.us?Math.round(60000000/tempos[0].us):120;
-  return {format,tracks:trackCount,division,tempo,notes,durationMs:notes.length?Math.max(...notes.map(n=>n.startMs+n.durationMs)):0};
+  const durationMs=notes.length?Math.max(...notes.map(n=>n.startMs+n.durationMs)):0;
+  const markerList=markers.sort((a,b)=>a.tick-b.tick).map(m=>({...m,startMs:tickMs(m.tick)}));
+  return {format,tracks:trackCount,division,tempo,notes,durationMs,markers:markerList};
 }
 function bestGuitarPosition(midi){
   const choices=[];GUITAR_STRINGS_LOW.forEach((s,index)=>{const fret=midi-s.midi;if(fret>=0&&fret<=22)choices.push({string:s.name,stringIndex:6-index,fret})});
@@ -298,24 +382,28 @@ async function renderSongLibrary(){
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 function closeSongWorkspace(){
   stopMidiPlayback();stopAudioSong();
-  if(alphaTabApi){try{alphaTabApi.destroy()}catch(e){}alphaTabApi=null}
+  if(alphaTabApi){try{alphaTabApi.playbackRange=null;alphaTabApi.isLooping=false;alphaTabApi.destroy()}catch(e){}alphaTabApi=null}
   if(currentSongAudioUrl){URL.revokeObjectURL(currentSongAudioUrl);currentSongAudioUrl=null}
-  $("songWorkspace").hidden=true;const audio=$("songAudio");audio.pause();audio.removeAttribute("src");audio.load();
+  currentSongId=null;currentSongType=null;
+  $("songWorkspace").hidden=true;$("songSectionPanel").hidden=true;const audio=$("songAudio");audio.pause();audio.removeAttribute("src");audio.load();
 }
 async function openSong(id){
   try{
     const r=id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):await songDbAction("readonly",{id});if(!r)throw new Error("No se encontró el archivo en la biblioteca local.");
-    closeSongWorkspace();$("songWorkspace").hidden=false;$("songTitle").textContent=r.name;$("songMeta").textContent=r.id.startsWith("builtin:")?"Ejercicio original incluido en Guitar Master AI":""+r.ext.toUpperCase()+" · "+prettySize(r.size)+" · guardado en este dispositivo";
-    $("audioSongPlayer").hidden=r.type!=="audio";$("midiSongPlayer").hidden=r.type!=="midi";$("gpSongPlayer").hidden=r.type!=="guitarpro";
+    closeSongWorkspace();currentSongId=r.id;currentSongType=r.type;$("songWorkspace").hidden=false;$("songTitle").textContent=r.name;$("songMeta").textContent=r.id.startsWith("builtin:")?"Ejercicio original incluido en Guitar Master AI":""+r.ext.toUpperCase()+" · "+prettySize(r.size)+" · guardado en este dispositivo";
+    $("audioSongPlayer").hidden=r.type!=="audio";$("midiSongPlayer").hidden=r.type!=="midi";$("gpSongPlayer").hidden=r.type!=="guitarpro";$("songSectionPanel").hidden=false;
     if(r.type==="audio"){
       if(!r.blob)throw new Error("El archivo de audio no está disponible en el almacenamiento local. Vuelve a importarlo.");
-      currentSongAudioUrl=URL.createObjectURL(r.blob);const audio=$("songAudio");audio.src=currentSongAudioUrl;audio.load();setAudioSongStatus("Audio cargado. Pulsa Reproducir audio.");
+      currentSongAudioUrl=URL.createObjectURL(r.blob);const audio=$("songAudio");audio.src=currentSongAudioUrl;audio.load();setAudioSongStatus("Audio cargado. Pulsa Reproducir audio o marca los límites de una sección.");
+      initializeSectionEditor(r);
     }else if(r.type==="midi"){
       songPracticeMode=false;songPracticeNotes=[];songPracticeIndex=0;currentMidiNotes=r.parsed.notes;renderMidiNotes(currentMidiNotes);
       $("midiSummary").textContent=`${r.parsed.notes.length} notas · ${r.parsed.tracks} pistas · ${r.parsed.tempo} BPM aprox. · Duración ${formatSongTime(r.parsed.durationMs)}. Reproducción sintetizada para escuchar las notas; posiciones sugeridas en afinación estándar.`;
       $("midiPlaybackStatus").textContent="MIDI listo. Pulsa Reproducir MIDI para escuchar la secuencia.";
+      initializeSectionEditor(r,buildMidiMarkerSections(r.parsed));
     }else if(r.type==="guitarpro"){
       await loadGuitarPro(r,"gpScore","gpStatus","gpPlayBtn","gpPauseBtn","gpStopBtn");
+      initializeSectionEditor(r,buildGpMarkerSections());
     }
     $("songWorkspace").scrollIntoView({behavior:"smooth",block:"start"});
   }catch(e){console.error(e);toast("No se pudo abrir la canción: "+(e.message||"error desconocido"));}
@@ -347,14 +435,16 @@ async function loadGuitarPro(record,targetId="gpScore",statusId="gpStatus",playI
   const loaded=api.load(new Uint8Array(await record.blob.arrayBuffer()));
   if(loaded===false)throw new Error("alphaTab no pudo iniciar la lectura de este archivo.");
   await ready;
-  playBtn.onclick=()=>{if(!api.isReadyForPlayback){status.textContent="El motor todavía no está listo.";return}const ok=api.play();if(targetId==="duoGpScore")duoGpActive=ok;status.textContent=ok?"Reproduciendo tablatura…":"No se pudo iniciar. Pulsa reproducir nuevamente."};
+  playBtn.onclick=()=>{if(!api.isReadyForPlayback){status.textContent="El motor todavía no está listo.";return}api.playbackRange=null;api.isLooping=false;api.playbackSpeed=1;const ok=api.play();if(targetId==="duoGpScore")duoGpActive=ok;status.textContent=ok?"Reproduciendo tablatura completa…":"No se pudo iniciar. Pulsa reproducir nuevamente."};
+  if(targetId==="gpScore"&&api.playerFinished?.on){api.playerFinished.on(()=>{if($("sectionStatus")&&currentSongType==="guitarpro"&&api.playbackRange&&!api.isLooping)$("sectionStatus").textContent="La sección terminó. Puedes volver a practicarla o elegir otra parte."})}
   pauseBtn.onclick=()=>{api.pause();if(targetId==="duoGpScore")duoGpActive=false;status.textContent="Reproducción pausada."};
   stopBtn.onclick=()=>{api.stop();if(targetId==="duoGpScore")duoGpActive=false;status.textContent="Reproducción detenida."};
   return api;
 }
 function setMidiPlaybackStatus(message){const el=$("midiPlaybackStatus");if(el)el.textContent=message}
 function stopMidiPlayback(message="Reproducción detenida."){
-  midiPlaybackTimers.forEach(clearTimeout);midiPlaybackTimers=[];midiPlaybackNodes.forEach(n=>{try{n.stop()}catch(e){}});midiPlaybackNodes=[];
+  midiPlaybackTimers.forEach(clearTimeout);midiPlaybackTimers=[];if(midiSectionLoopTimer){clearTimeout(midiSectionLoopTimer);midiSectionLoopTimer=null}
+  midiPlaybackNodes.forEach(n=>{try{n.stop()}catch(e){}});midiPlaybackNodes=[];midiPlaybackMeta=null;
   if(midiAudioContext){midiAudioContext.close().catch(()=>{});midiAudioContext=null}
   document.querySelectorAll(".midi-note.active").forEach(el=>el.classList.remove("active"));setMidiPlaybackStatus(message);
 }
@@ -371,7 +461,7 @@ async function playMidi(){
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC){setMidiPlaybackStatus("Este navegador no permite reproducción de audio Web.");return}
   try{
     const speed=Number($("midiSpeed").value)||1;midiAudioContext=new AC({latencyHint:"interactive"});await midiAudioContext.resume();
-    const base=midiAudioContext.currentTime+.16;
+    const base=midiAudioContext.currentTime+.16;midiPlaybackMeta={startMs:0,speed,realStart:performance.now()+160,endMs:Math.max(...currentMidiNotes.map(n=>n.startMs+n.durationMs))};
     currentMidiNotes.forEach((n,i)=>{
       const start=base+n.startMs/1000/speed,duration=Math.min(4,Math.max(.07,n.durationMs/1000/speed));
       schedulePluck(midiAudioContext,n.pitch,n.velocity,start,duration,midiPlaybackNodes);
@@ -384,10 +474,11 @@ async function playMidi(){
 function setAudioSongStatus(message){const el=$("songAudioStatus");if(el)el.textContent=message}
 async function playAudioSong(){
   const audio=$("songAudio");if(!audio.src){setAudioSongStatus("Primero abre un archivo MP3 o WAV de tu biblioteca.");return}
-  try{await audio.play();setAudioSongStatus("Reproduciendo audio.")}
+  if(activeAudioSectionHandler){audio.removeEventListener("timeupdate",activeAudioSectionHandler);activeAudioSectionHandler=null}if(activeAudioEndedHandler){audio.removeEventListener("ended",activeAudioEndedHandler);activeAudioEndedHandler=null}audio.playbackRate=1;
+  try{await audio.play();setAudioSongStatus("Reproduciendo audio completa.")}
   catch(e){console.error(e);setAudioSongStatus("El navegador no pudo reproducir el archivo: "+(e.message||"formato no compatible"));toast("No se pudo reproducir el audio. Verifica que sea MP3 o WAV compatible.")}
 }
-function stopAudioSong(){const audio=$("songAudio");if(audio){audio.pause();try{audio.currentTime=0}catch(e){}}}
+function stopAudioSong(){const audio=$("songAudio");if(audio){if(activeAudioSectionHandler){audio.removeEventListener("timeupdate",activeAudioSectionHandler);activeAudioSectionHandler=null}if(activeAudioEndedHandler){audio.removeEventListener("ended",activeAudioEndedHandler);activeAudioEndedHandler=null}audio.pause();audio.playbackRate=1;try{audio.currentTime=0}catch(e){}}}
 $("songAudioPlayBtn").addEventListener("click",playAudioSong);
 $("songAudioPracticeBtn").addEventListener("click",()=>{songPracticeMode=false;songPracticeNotes=[];songPracticeIndex=0;setExercise();playAudioSong();showView("practice");setFeedback("Practica con la pista de acompañamiento. Usa auriculares para evitar que el audio vuelva al micrófono.",false)});
 $("songAudioStopBtn").addEventListener("click",()=>{stopAudioSong();setAudioSongStatus("Audio detenido.")});
@@ -397,333 +488,243 @@ $("songAudio").addEventListener("pause",()=>{if($("songAudio").currentTime>0)set
 $("songAudio").addEventListener("ended",()=>setAudioSongStatus("La canción terminó."));
 $("songAudio").addEventListener("error",()=>{const code=$("songAudio").error?.code;const descriptions={1:"carga cancelada",2:"error de lectura",3:"formato o códec no compatible",4:"formato no compatible"};setAudioSongStatus("No se pudo decodificar el audio: "+(descriptions[code]||"archivo inválido"))});
 
-// ===================== ROCK ENGINE V1.5 · MODO DÚO =====================
-const duoPlayers=[null,null];
-let duoRecords=[], gameChart=null, gameGpApi=null, gameGpScore=null, gameGpTracks=[];
-let gamePlayerNotes=[[],[]], gameClockMode="none", gameStarted=false, gamePaused=false, gameChartLoading=false;
-let gameRAF=0, gameStartPerf=0, gamePauseAt=0, gameElapsedBeforePause=0, gameDuration=0, gameSpeed=1;
-let gameAudio=null, gameAudioUrl=null, gameAudioCtx=null, gameAudioBase=0, gameAudioNodes=[];
-let gameScore=[{hits:0,misses:0,points:0},{hits:0,misses:0,points:0}];
-const GAME_LOOKAHEAD_MS=3600, GAME_HIT_WINDOW_MS=190;
-function duoInstrumentStrings(value){return value.includes("Bajo")?"G D A E":"E A D G B E"}
-function updateDuoInstrumentLabels(){[1,2].forEach(n=>{const instrument=$("duoInstrument"+n).value;$("duoStageInstrument"+n).textContent=instrument;});}
-function setDuoStatus(message){const el=$("duoSessionStatus");if(el)el.textContent=message}
-function fingerFromFret(fret){return fret<=0?0:((Math.max(1,fret)-1)%4)+1}
-function fingerName(n){return ["Al aire","Índice","Medio","Anular","Meñique"][n]||"Sugerido"}
-function playerTuning(instrument){return instrument.includes("Bajo")?[28,33,38,43]:[40,45,50,55,59,64]}
-function positionForMidi(midi,instrument){
-  const tuning=playerTuning(instrument),choices=[];
-  tuning.forEach((open,i)=>{const fret=midi-open;if(fret>=0&&fret<=22)choices.push({stringNumber:i+1,fret,stringIndex:tuning.length-i})});
-  choices.sort((a,b)=>a.fret-b.fret||b.stringNumber-a.stringNumber);
-  const p=choices[0]||{stringNumber:0,fret:"—",stringIndex:0};
-  return {...p,finger:typeof p.fret==="number"?fingerFromFret(p.fret):0};
+// Práctica por secciones: rangos de tiempo para audio/MIDI y compases para Guitar Pro.
+function readSectionStore(){try{return JSON.parse(localStorage.getItem(SECTION_STORAGE_KEY)||"{}")}catch(e){return {}}}
+function writeSectionStore(data){try{localStorage.setItem(SECTION_STORAGE_KEY,JSON.stringify(data))}catch(e){console.warn("No se pudieron guardar los marcadores de sección",e);$("sectionStatus").textContent="El navegador no permitió guardar los marcadores. Puedes seguir practicando mientras esta pestaña esté abierta."}}
+function savedSectionsForSong(){const all=readSectionStore();return currentSongId?(all[currentSongId]||[]):[]}
+function storeSectionsForSong(list){if(!currentSongId)return;const all=readSectionStore();all[currentSongId]=list;writeSectionStore(all)}
+function formatSectionSeconds(value){const total=Math.max(0,Math.floor(Number(value)||0));return Math.floor(total/60)+":"+String(total%60).padStart(2,"0")}
+function gpMasterBars(){return alphaTabApi?.score?.masterBars?Array.from(alphaTabApi.score.masterBars):[]}
+function gpMasterBarStart(index){const bars=gpMasterBars(),bar=bars[index];if(!bar)return null;try{return alphaTabApi.tickCache?.getMasterBarStart?.(bar)??bar.start??null}catch(e){return bar.start??null}}
+function buildMidiMarkerSections(parsed){
+  const markers=parsed?.markers||[];if(!markers.length)return [];
+  return markers.map((m,i)=>({id:"midi-marker-"+i,name:m.text||("Sección "+(i+1)),unit:"seconds",start:Math.max(0,m.startMs/1000),end:Math.max(0,(markers[i+1]?.startMs??parsed.durationMs)/1000)})).filter(x=>x.end>x.start);
 }
-function normalizeMidiNote(n,instrument){
-  const position=positionForMidi(n.pitch,instrument);
-  return {timeMs:Number(n.startMs)||0,durationMs:Number(n.durationMs)||150,pitch:n.pitch,name:n.name||midiName(n.pitch),stringNumber:position.stringNumber,fret:position.fret,finger:position.finger,hit:false,miss:false};
+function buildGpMarkerSections(){
+  const bars=gpMasterBars();if(!bars.length||!alphaTabApi)return [];
+  const markers=[];bars.forEach((bar,index)=>{const section=bar.section;if(section){const text=String(section.text||section.marker||"").trim();if(text)markers.push({index,name:text})}});
+  if(!markers.length)return [];
+  return markers.map((m,i)=>({id:"gp-marker-"+i,name:m.name,unit:"bars",start:m.index+1,end:(markers[i+1]?.index??bars.length)-0})).filter(x=>x.end>=x.start);
 }
-function midiTrackIndexes(song){const set=new Set((song.parsed?.notes||[]).map(n=>Number.isFinite(n.track)?n.track:0));return [...set].sort((a,b)=>a-b)}
-function updateTrackPickers(items){
-  [1,2].forEach(n=>{const select=$("duoTrack"+n),old=select.value;select.innerHTML=items.map((it,i)=>`<option value="${it.index}">${escapeHtml(it.name||("Pista "+(i+1)))}</option>`).join("")||'<option value="0">Sin pistas</option>';if([...select.options].some(o=>o.value===old))select.value=old;});
+function initializeSectionEditor(record,autoSections=[]){
+  const panel=$("songSectionPanel");if(!panel)return;panel.hidden=false;
+  const isGp=record.type==="guitarpro",unit=isGp?"bars":"seconds";
+  $("sectionStartLabel").textContent=isGp?"Compás inicial":"Inicio (segundos)";
+  $("sectionEndLabel").textContent=isGp?"Compás final":"Final (segundos)";
+  $("sectionMarkStart").textContent=isGp?"⌖ Marcar compás actual como inicio":"⌖ Marcar inicio actual";
+  $("sectionMarkEnd").textContent=isGp?"⌖ Marcar compás actual como final":"⌖ Marcar final actual";
+  $("sectionStart").step=isGp?"1":"0.1";$("sectionEnd").step=isGp?"1":"0.1";
+  $("sectionStart").min=isGp?"1":"0";$("sectionEnd").min=isGp?"1":"0.1";
+  $("sectionStart").value=isGp?"1":"0";
+  const barCount=isGp?gpMasterBars().length:0;
+  let duration=record.type==="midi"?(record.parsed?.durationMs||0)/1000:record.type==="audio"&&Number.isFinite($("songAudio").duration)?$("songAudio").duration:30;
+  $("sectionEnd").value=isGp?String(Math.max(1,barCount)):String(Math.max(0.1,Math.round(duration*10)/10));
+  $("sectionPreset").value="Introducción";$("sectionCustomWrap").hidden=true;$("sectionCustomName").value="";$("sectionRepeat").checked=true;$("sectionSpeed").value="1";
+  const stored=savedSectionsForSong();
+  let sections=stored.length?stored:autoSections;
+  if(!stored.length&&autoSections.length){storeSectionsForSong(autoSections);}
+  renderSavedSections(sections);
+  if(isGp){$("sectionPracticeHelp").textContent=barCount?`Este archivo tiene ${barCount} compases. Puedes repetir una parte por número de compás o usar los marcadores guardados en Guitar Pro.`:"No se detectaron compases en la tablatura. Comprueba que el archivo Guitar Pro esté cargado."}
+  else if(record.type==="midi"){$("sectionPracticeHelp").textContent=record.parsed?.markers?.length?"Se detectaron marcadores dentro del MIDI. También puedes crear tus propios rangos de tiempo.":"Marca el inicio y el final mientras escuchas, o escribe los tiempos en segundos. Las partes quedarán guardadas para esta canción."}
+  else $("sectionPracticeHelp").textContent="Reproduce la pista, marca el inicio y el final de cada parte y guárdalos. Luego podrás repetir la introducción, estrofas, coro, puente, solo o final.";
+  $("sectionStatus").textContent=sections.length?`Se cargaron ${sections.length} secciones guardadas para esta canción.`:"No hay partes definidas todavía. Elige una sección y marca sus límites.";
 }
-async function initDuoView(preferred={}){
-  updateDuoInstrumentLabels();
-  try{duoRecords=await songDbAction("readonly")}catch(e){duoRecords=[];setDuoStatus("No se pudo abrir la biblioteca local: "+(e.message||e))}
-  const charts=[...BUILTIN_SONGS,...duoRecords.filter(r=>r.type==="midi"||r.type==="guitarpro")];
-  const select=$("duoSong"),previous=select.value;
-  select.innerHTML='<option value="">Selecciona MIDI o Guitar Pro</option>'+charts.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio":" · "+r.ext.toUpperCase()}</option>`).join("");
-  if(preferred.chartId&&[...select.options].some(o=>o.value===preferred.chartId))select.value=preferred.chartId;
-  else if(preferred.backingId&&!preferred.chartId)select.value="";
-  else if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;
-  else select.value=BUILTIN_SONGS[0].id;
-  const backs=duoRecords.filter(r=>r.type==="audio"),back=$("gameBacking"),oldBack=back.value;
-  back.innerHTML='<option value="">Usar audio sintetizado de la partitura</option>'+backs.map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)} · ${r.ext.toUpperCase()}</option>`).join("");
-  if(preferred.backingId&&[...back.options].some(o=>o.value===preferred.backingId))back.value=preferred.backingId;
-  else if(oldBack&&[...back.options].some(o=>o.value===oldBack))back.value=oldBack;
+function renderSavedSections(list=savedSectionsForSong()){
+  const root=$("savedSections");if(!root)return;
+  $("sectionCount").textContent=list.length+ (list.length===1?" sección":" secciones");
+  if(!list.length){root.innerHTML='<p class="empty-library">Todavía no has marcado partes de esta canción.</p>';return}
+  root.innerHTML=list.map(section=>{
+    const range=section.unit==="bars"?`Compases ${section.start}–${section.end}`:`${formatSectionSeconds(section.start)}–${formatSectionSeconds(section.end)}`;
+    return `<article class="saved-section"><div><strong>${escapeHtml(section.name)}</strong><small>${range}</small></div><div class="saved-section-actions"><button data-section-play="${escapeHtml(section.id)}">▶ Practicar</button><button class="section-delete" data-section-delete="${escapeHtml(section.id)}" aria-label="Eliminar ${escapeHtml(section.name)}">×</button></div></article>`
+  }).join("");
+}
+function currentSectionPosition(){
+  if(currentSongType==="audio"){const audio=$("songAudio");return Number.isFinite(audio.currentTime)?audio.currentTime:0}
+  if(currentSongType==="midi"&&midiPlaybackMeta){const elapsed=Math.max(0,performance.now()-midiPlaybackMeta.realStart);return Math.min(midiPlaybackMeta.endMs,midiPlaybackMeta.startMs+elapsed*midiPlaybackMeta.speed)/1000}
+  if(currentSongType==="guitarpro"&&alphaTabApi){const tick=Number(alphaTabApi.tickPosition)||0,bars=gpMasterBars();let index=0;for(let i=0;i<bars.length;i++){const start=gpMasterBarStart(i);if(start!==null&&start<=tick)index=i+1;else if(start!==null&&start>tick)break}return Math.max(1,index)}
+  return 0;
+}
+function markSectionBoundary(which){
+  const value=currentSectionPosition();const input=$(which==="start"?"sectionStart":"sectionEnd");
+  input.value=currentSongType==="guitarpro"?String(Math.max(1,Math.round(value))):String(Math.round(value*10)/10);
+  if(which==="start"&&Number($("sectionEnd").value)<=Number(input.value))$("sectionEnd").value=String(Number(input.value)+(currentSongType==="guitarpro"?1:10));
+  if(which==="end"&&Number($("sectionStart").value)>=Number(input.value))$("sectionStart").value=String(Math.max(currentSongType==="guitarpro"?1:0,Number(input.value)-(currentSongType==="guitarpro"?1:10)));
+  $("sectionStatus").textContent=(which==="start"?"Inicio":"Final")+" marcado en "+(currentSongType==="guitarpro"?"compás ":" ")+input.value+(currentSongType==="guitarpro"?"":" s.");
+}
+function saveCurrentSection(){
+  const unit=currentSongType==="guitarpro"?"bars":"seconds",start=Number($("sectionStart").value),end=Number($("sectionEnd").value);
+  if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start){toast("El final debe ser mayor que el inicio de la sección.");return}
+  if(unit==="bars"&&(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end>gpMasterBars().length)){toast("Selecciona un rango de compases válido para esta tablatura.");return}
+  if(unit==="seconds"){
+    const limit=currentSongType==="audio"?(Number.isFinite($("songAudio").duration)?$("songAudio").duration:Infinity):currentMidiNotes.length?Math.max(...currentMidiNotes.map(n=>n.startMs+n.durationMs))/1000:Infinity;
+    if(start<0||end>limit+0.3){toast("El rango supera la duración de esta canción.");return}
+  }
+  const preset=$("sectionPreset").value,name=preset==="custom"?$("sectionCustomName").value.trim():preset;
+  if(!name){toast("Escribe un nombre para la sección.");return}
+  const section={id:crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random(),name,unit,start,end};
+  const list=savedSectionsForSong();list.push(section);storeSectionsForSong(list);renderSavedSections(list);$("sectionStatus").textContent=`Se guardó «${name}». Puedes practicarla ahora y activar o desactivar el bucle.`;toast("Sección guardada en esta canción.");
+}
+function getGpSectionRange(startBar,endBar){
+  const bars=gpMasterBars();if(!bars.length||startBar<1||endBar<startBar||endBar>bars.length)throw new Error("El rango de compases no es válido.");
+  const startTick=gpMasterBarStart(startBar-1),endTick=endBar<bars.length?gpMasterBarStart(endBar):Number(alphaTabApi.endTick);
+  if(startTick===null||endTick===null||endTick<=startTick)throw new Error("No se pudo calcular el rango de reproducción de Guitar Pro.");
+  return {startTick,endTick};
+}
+function playAudioSection(section,speed,loop){
+  const audio=$("songAudio");if(!audio.src||!Number.isFinite(audio.duration)){throw new Error("La pista de audio todavía no está lista.")}
+  const start=section.start,end=section.end;if(start<0||end>audio.duration+0.2||end<=start)throw new Error("Los tiempos de esta sección quedan fuera de la duración del audio.");
+  if(activeAudioSectionHandler){audio.removeEventListener("timeupdate",activeAudioSectionHandler);activeAudioSectionHandler=null}if(activeAudioEndedHandler){audio.removeEventListener("ended",activeAudioEndedHandler);activeAudioEndedHandler=null}
+  audio.pause();audio.currentTime=start;audio.playbackRate=speed;
+  let wrapping=false,finished=false;
+  const finish=()=>{if(finished)return;finished=true;if(activeAudioSectionHandler){audio.removeEventListener("timeupdate",activeAudioSectionHandler);activeAudioSectionHandler=null}if(activeAudioEndedHandler){audio.removeEventListener("ended",activeAudioEndedHandler);activeAudioEndedHandler=null}audio.playbackRate=1;$("sectionStatus").textContent=`Terminó «${section.name}». Puedes volver a practicarla.`};
+  const rewind=()=>{if(wrapping)return;wrapping=true;audio.currentTime=start;wrapping=false;if(audio.paused)audio.play().catch(e=>console.warn("No se pudo reanudar el bucle de audio",e))};
+  activeAudioSectionHandler=()=>{if(wrapping||audio.currentTime<end-0.04)return;if(loop)rewind();else{audio.pause();finish()}};
+  activeAudioEndedHandler=()=>{if(loop&&end>=audio.duration-0.25)rewind();else finish()};
+  audio.addEventListener("timeupdate",activeAudioSectionHandler);audio.addEventListener("ended",activeAudioEndedHandler);
+  audio.play().then(()=>{$("sectionStatus").textContent=`Practicando «${section.name}» · ${Math.round(speed*100)}%${loop?" · bucle activado":" · una reproducción"}.`}).catch(e=>{$("sectionStatus").textContent="No se pudo reproducir el fragmento: "+e.message});
+}
+async function playMidiSection(section,speed,loop){
+  const startMs=section.start*1000,endMs=section.end*1000;
+  if(endMs<=startMs)throw new Error("El final debe ser mayor que el inicio.");
+  const selected=currentMidiNotes.filter(n=>n.startMs>=startMs&&n.startMs<endMs);
+  if(!selected.length)throw new Error("No hay notas MIDI dentro de ese rango de tiempo. Ajusta los límites.");
+  stopMidiPlayback("Preparando sección MIDI…");const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("El navegador no permite reproducir MIDI.");
+  midiAudioContext=new AC({latencyHint:"interactive"});await midiAudioContext.resume();
+  const playPass=()=>{
+    midiPlaybackTimers.forEach(clearTimeout);midiPlaybackTimers=[];midiPlaybackNodes=[];
+    const base=midiAudioContext.currentTime+.12;midiPlaybackMeta={startMs,speed,realStart:performance.now()+120,endMs};
+    selected.forEach(n=>{const offset=(n.startMs-startMs)/1000/speed,duration=Math.min(n.durationMs/1000/speed,Math.max(.07,(endMs-n.startMs)/1000/speed));schedulePluck(midiAudioContext,n.pitch,n.velocity,base+offset,duration,midiPlaybackNodes)});
+    const passMs=(endMs-startMs)/speed;
+    midiSectionLoopTimer=setTimeout(()=>{if(loop&&midiAudioContext){playPass()}else{stopMidiPlayback("Sección MIDI finalizada.");$("sectionStatus").textContent=`Terminó «${section.name}». Puedes volver a practicarla o elegir otra parte.`}},passMs+180);
+  };
+  playPass();setMidiPlaybackStatus(`Practicando sección · ${Math.round(speed*100)}%${loop?" · bucle activado":""}.`);$("sectionStatus").textContent=`Practicando «${section.name}» · ${Math.round(speed*100)}%${loop?" · bucle activado":" · una reproducción"}.`;
+}
+function playGpSection(section,speed,loop){
+  if(!alphaTabApi?.isReadyForPlayback)throw new Error("El reproductor Guitar Pro todavía no está listo.");
+  const range=getGpSectionRange(section.start,section.end);alphaTabApi.playbackRange=range;alphaTabApi.isLooping=!!loop;alphaTabApi.playbackSpeed=speed;alphaTabApi.tickPosition=range.startTick;
+  if(!alphaTabApi.play())throw new Error("No se pudo iniciar la sección en Guitar Pro.");
+  $("gpStatus").textContent=`Practicando «${section.name}» · compases ${section.start}–${section.end} · ${Math.round(speed*100)}%${loop?" · bucle":""}.`;
+  $("sectionStatus").textContent=`Practicando «${section.name}» · compases ${section.start}–${section.end} · ${Math.round(speed*100)}%${loop?" · bucle activado":" · una reproducción"}.`;
+}
+async function practiceSavedSection(id){
+  const section=savedSectionsForSong().find(x=>x.id===id);if(!section)return;
+  const speed=Number($("sectionSpeed").value)||1,loop=$("sectionRepeat").checked;
+  try{
+    if(section.unit==="bars")playGpSection(section,speed,loop);
+    else if(currentSongType==="audio")playAudioSection(section,speed,loop);
+    else if(currentSongType==="midi")await playMidiSection(section,speed,loop);
+    $("sectionStart").value=section.start;$("sectionEnd").value=section.end;$("sectionPreset").value=["Introducción","Estrofa 1","Coro","Estrofa 2","Puente","Solo","Final"].includes(section.name)?section.name:"custom";$("sectionCustomWrap").hidden=$("sectionPreset").value!=="custom";$("sectionCustomName").value=$("sectionPreset").value==="custom"?section.name:"";
+  }catch(e){console.error(e);$("sectionStatus").textContent=e.message||"No se pudo iniciar esta sección.";toast(e.message||"No se pudo iniciar la sección.")}
+}
+$("sectionPreset").addEventListener("change",()=>{$("sectionCustomWrap").hidden=$("sectionPreset").value!=="custom"});
+$("sectionMarkStart").addEventListener("click",()=>markSectionBoundary("start"));
+$("sectionMarkEnd").addEventListener("click",()=>markSectionBoundary("end"));
+$("sectionSaveBtn").addEventListener("click",saveCurrentSection);
+$("savedSections").addEventListener("click",async e=>{
+  const play=e.target.closest("[data-section-play]"),del=e.target.closest("[data-section-delete]");
+  if(play)await practiceSavedSection(play.dataset.sectionPlay);
+  if(del){const list=savedSectionsForSong().filter(x=>x.id!==del.dataset.sectionDelete);storeSectionsForSong(list);renderSavedSections(list);$("sectionStatus").textContent="Se eliminó el marcador de sección."}
+});
+$("sectionSpeed").addEventListener("change",()=>{if(currentSongType==="guitarpro"&&alphaTabApi)alphaTabApi.playbackSpeed=Number($("sectionSpeed").value)||1;if(currentSongType==="audio")$("songAudio").playbackRate=Number($("sectionSpeed").value)||1});
+$("sectionMarkStart").title="Marca dónde comienza esta parte mientras se reproduce la canción.";
+$("sectionMarkEnd").title="Marca dónde termina esta parte mientras se reproduce la canción.";
+$("songAudio").addEventListener("loadedmetadata",()=>{if(currentSongType==="audio"&&savedSectionsForSong().length===0&&Number($("sectionEnd").value)<=30)$("sectionEnd").value=String(Math.round($("songAudio").duration*10)/10)});
+
+// Modo Dúo local: dos entradas separadas o dos canales de una interfaz estéreo.
+const duoPlayers=[null,null];let duoRecords=[];let duoSharedAudio=null;let duoSharedUrl=null;let duoMidiCtx=null,duoMidiTimers=[],duoMidiNodes=[],duoGpActive=false;
+function duoInstrumentStrings(value){return value.includes("Bajo")?"E A D G":"E A D G B E"}
+function updateDuoInstrumentLabels(){[1,2].forEach(n=>{const instrument=$("duoInstrument"+n).value;$("duoStageInstrument"+n).textContent=instrument;$("duoFret"+n).textContent=duoInstrumentStrings(instrument)})}
+async function initDuoView(){
+  updateDuoInstrumentLabels();const select=$("duoSong"),previous=select.value;
+  try{duoRecords=await songDbAction("readonly")}catch(e){duoRecords=[]}
+  const opts=[...BUILTIN_SONGS,...duoRecords].map(r=>`<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)}${r.id.startsWith("builtin:")?" · ejercicio": " · "+r.ext.toUpperCase()}</option>`).join("");
+  select.innerHTML='<option value="">Selecciona una canción de la biblioteca</option>'+opts;
+  if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;
   await populateDuoInputs();
-  if(select.value)await prepareGameChart(select.value);
-  else {gameChart=null;gamePlayerNotes=[[],[]];gameDuration=0;$('duoStageSong').textContent=back.value?"Audio listo · falta una partitura para mostrar las notas":"Selecciona una partitura o un audio";$('gameStateTag').textContent=back.value?"AUDIO LISTO":"ESPERANDO CANCIÓN";setDuoStatus(back.value?"Audio cargado. Puedes reproducirlo sin partitura o añadir MIDI/Guitar Pro para ver las notas.":"Selecciona un archivo MIDI, Guitar Pro o MP3/WAV.");renderGameNow(0)}
 }
 async function populateDuoInputs(){
   try{
     const devices=await navigator.mediaDevices.enumerateDevices(),inputs=devices.filter(d=>d.kind==="audioinput");
-    [1,2].forEach(n=>{const el=$("duoInput"+n),old=el.value;el.innerHTML='<option value="">Entrada predeterminada</option>'+inputs.map((d,i)=>`<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label||("Entrada de audio "+(i+1)))}</option>`).join("");if(old)el.value=old});
-  }catch(e){console.warn("No se pudieron enumerar las entradas",e)}
-}
-function updateDuoConnectionStatus(index){
-  const n=index+1,p=duoPlayers[index];
-  $("duoConnect"+n).textContent=p?`Jugador ${n} conectado`:`Conectar jugador ${n}`;
-  $("duoConnect"+n).disabled=!!p;
-  $("duoDot"+n).classList.toggle("connected",!!p);
-  $("duoStageStatus"+n).textContent=p?`Entrada validada · ${p.label} · canal ${p.channelIndex+1}`:"Sin entrada · vista previa disponible";
+    [1,2].forEach(n=>{const el=$("duoInput"+n),old=el.value;el.innerHTML='<option value="">Entrada predeterminada</option>'+inputs.map((d,i)=>`<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label||`Entrada de audio ${i+1}`)}</option>`).join("");if(old)el.value=old});
+  }catch(e){console.warn("No se pudieron enumerar las entradas de audio",e)}
 }
 async function connectDuoPlayer(index){
-  const n=index+1;if(duoPlayers[index])return;
-  if(!navigator.mediaDevices?.getUserMedia){toast("El audio requiere Chrome/Edge y la página publicada mediante HTTPS.");return}
-  let media=null,ctx=null;
+  const n=index+1;if(duoPlayers[index]){toast(`El jugador ${n} ya está conectado.`);return}
+  if(!navigator.mediaDevices?.getUserMedia){toast("Se necesita Chrome o Edge actualizado y HTTPS para capturar audio.");return}
+  let media=null;
   try{
-    const selectedDevice=$("duoInput"+n).value,channelIndex=Number($("duoChannel"+n).value||0),other=duoPlayers[1-index];
-    const constraints={...(selectedDevice?{deviceId:{exact:selectedDevice}}:{}),channelCount:{ideal:2},echoCancellation:false,noiseSuppression:false,autoGainControl:false};
-    media=await navigator.mediaDevices.getUserMedia({audio:constraints,video:false});
-    const track=media.getAudioTracks()[0],settings=track?.getSettings?.()||{},actualDeviceId=settings.deviceId||selectedDevice||"default",channelCount=settings.channelCount||1;
-    if(channelIndex>0&&channelCount<2)throw new Error("La entrada seleccionada solo entrega un canal mono. Elige otra entrada o una interfaz estéreo.");
-    if(other){
-      const sameDevice=(other.actualDeviceId||other.deviceId||"default")===(actualDeviceId||"default");
-      if(sameDevice&&other.channelIndex===channelIndex)throw new Error("Los dos jugadores están usando la misma entrada y canal. Usa otra entrada o asigna canal 1 a uno y canal 2 al otro.");
-      if(sameDevice&&channelCount<2)throw new Error("El micrófono compartido es mono. No puede dividirse en dos guitarras independientes.");
+    const deviceId=$("duoInput"+n).value,other=duoPlayers[1-index];let channelIndex=Number($("duoChannel"+n).value||0);
+    const sameDevice=!!other&&(other.deviceId||"")===(deviceId||"");
+    if(sameDevice&&channelIndex===other.channelIndex){channelIndex=other.channelIndex===0?1:0;$("duoChannel"+n).value=String(channelIndex);toast(`Se asignó el canal ${channelIndex+1} al jugador ${n} para separar ambas señales.`)}
+    if(other&&(other.deviceId||"")===(deviceId||"")&&other.channelIndex===channelIndex)throw new Error("Los dos jugadores no pueden usar el mismo canal de audio. Selecciona canales 1 y 2, o entradas distintas.");
+    const audio={...(deviceId?{deviceId:{exact:deviceId}}:{}),channelCount:{ideal:2},echoCancellation:false,noiseSuppression:false,autoGainControl:false};
+    media=await navigator.mediaDevices.getUserMedia({audio,video:false});
+    const track=media.getAudioTracks()[0],settings=track?.getSettings?.()||{},channelCount=settings.channelCount||1,actualDeviceId=settings.deviceId||deviceId;
+    if(other&&(other.actualDeviceId||other.deviceId||"")===(actualDeviceId||"")&&other.channelIndex===channelIndex){
+      if(channelCount>1){channelIndex=other.channelIndex===0?1:0;$("duoChannel"+n).value=String(channelIndex);toast(`La entrada corresponde al mismo dispositivo: asigné automáticamente el canal ${channelIndex+1} al jugador ${n}.`)}
+      else throw new Error("Los dos jugadores están usando el mismo dispositivo mono. Conecta una segunda entrada o usa una interfaz estéreo con canales separados.");
     }
-    const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("Este navegador no ofrece AudioContext.");
-    ctx=new AC({latencyHint:"interactive"});await ctx.resume();
-    const source=ctx.createMediaStreamSource(media),analyser=ctx.createAnalyser();analyser.fftSize=8192;analyser.smoothingTimeConstant=0;
-    if(channelCount>1){const splitter=ctx.createChannelSplitter(channelCount);source.connect(splitter);splitter.connect(analyser,channelIndex)}else source.connect(analyser);
-    const player={stream:media,ctx,source,analyser,buffer:new Float32Array(analyser.fftSize),raf:0,deviceId:selectedDevice,actualDeviceId,channelIndex,channelCount,label:track.label||`Entrada ${n}`,lastMidi:null,lastSignalAt:0,notes:0};
-    duoPlayers[index]=player;let lastAnalysis=0;
-    const tick=now=>{
-      if(duoPlayers[index]!==player)return;
-      if(now-lastAnalysis>=55){lastAnalysis=now;analyser.getFloatTimeDomainData(player.buffer);const pitch=detectPitch(player.buffer,ctx.sampleRate);
-        if(pitch){const attack=player.lastMidi!==pitch.midi||now-player.lastSignalAt>135;$("duoNote"+n).textContent=midiName(pitch.midi);$("duoPitch"+n).textContent=`${pitch.frequency.toFixed(1)} Hz · señal activa`;player.lastSignalAt=now;player.lastMidi=pitch.midi;if(attack&&gameStarted&&!gamePaused)registerGamePitch(index,pitch.midi,getGameTimeMs())}
-        else if(now-player.lastSignalAt>120){player.lastMidi=null;$("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Esperando nota"}
-      }
+    if(channelIndex>0&&channelCount<2)throw new Error("Esta entrada solo ofrece un canal mono. Para usar canal 2 necesitas una interfaz estéreo o una segunda entrada de audio independiente.");
+    const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("El navegador no dispone de AudioContext.");
+    const ctx=new AC({latencyHint:"interactive"});await ctx.resume();const src=ctx.createMediaStreamSource(media),an=ctx.createAnalyser();an.fftSize=8192;an.smoothingTimeConstant=0;
+    if(channelCount>1){const splitter=ctx.createChannelSplitter(channelCount);src.connect(splitter);splitter.connect(an,channelIndex);}
+    else src.connect(an);
+    const player={stream:media,ctx,src,an,raf:0,buffer:new Float32Array(an.fftSize),deviceId,actualDeviceId,channelIndex,channelCount,lastMidi:null,lastNoteAt:0,notes:0};duoPlayers[index]=player;
+    let lastAnalysis=0;const tick=now=>{
+      if(!duoPlayers[index])return;
+      if(now-lastAnalysis>=65){lastAnalysis=now;an.getFloatTimeDomainData(player.buffer);const pitch=detectPitch(player.buffer,ctx.sampleRate);
+        if(pitch){const cents=Math.abs(noteCents(pitch.frequency,pitch.midi));$("duoNote"+n).textContent=midiName(pitch.midi);$("duoPitch"+n).textContent=pitch.frequency.toFixed(1)+" Hz · "+(cents<=5?"Afinada":cents.toFixed(0)+" cents de desviación");if(pitch.midi!==player.lastMidi&&now-player.lastNoteAt>180){player.notes++;player.lastMidi=pitch.midi;player.lastNoteAt=now;$("duoAccuracy"+n).textContent=player.notes+" notas"}}
+        else if(now-player.lastNoteAt>800){$("duoNote"+n).textContent="—"}}
       player.raf=requestAnimationFrame(tick);
-    };
-    player.raf=requestAnimationFrame(tick);updateDuoConnectionStatus(index);await populateDuoInputs();
-    setDuoStatus(`Jugador ${n} conectado. Entrada de audio concedida y canal ${channelIndex+1} asignado.`);
-  }catch(e){if(media)media.getTracks().forEach(t=>t.stop());if(ctx)ctx.close().catch(()=>{});console.error(e);$("duoDot"+n).classList.add("error");toast(`Jugador ${n}: ${e.message||"no se pudo abrir la entrada"}`);setDuoStatus(`No se conectó el jugador ${n}: ${e.message||e}`)}
+    };player.raf=requestAnimationFrame(tick);
+    $("duoConnect"+n).textContent=`Jugador ${n} conectado`;$("duoConnect"+n).disabled=true;$("duoStageStatus"+n).textContent=`Entrada activa · canal ${channelIndex+1}`;
+    $("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados";
+    await populateDuoInputs();toast(`Audio del jugador ${n} conectado. Canal ${channelIndex+1}.`);
+  }catch(e){if(media)media.getTracks().forEach(t=>t.stop());console.error(e);toast(`Jugador ${n}: ${e.message||"No se pudo conectar el audio."}`)}
 }
 function stopDuoPlayer(index){
   const n=index+1,p=duoPlayers[index];if(!p)return;cancelAnimationFrame(p.raf);p.stream.getTracks().forEach(t=>t.stop());p.ctx.close().catch(()=>{});duoPlayers[index]=null;
-  $("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Sin conectar";$("duoAccuracy"+n).textContent="—";updateDuoConnectionStatus(index);
+  $("duoNote"+n).textContent="—";$("duoPitch"+n).textContent="Esperando conexión";$("duoAccuracy"+n).textContent="—";$("duoConnect"+n).disabled=false;$("duoConnect"+n).textContent=`Conectar jugador ${n}`;$("duoStageStatus"+n).textContent="Sin conexión";$("duoSessionStatus").textContent=duoPlayers.filter(Boolean).length+" de 2 jugadores conectados";
 }
-function buildAlphaTempoMap(score){
-  const events=[{tick:0,bpm:Math.max(1,Number(score?.tempo)||120)}];
-  const bars=score?.masterBars||[];
-  bars.forEach((bar,index)=>{
-    const barStart=Number.isFinite(Number(bar.start))?Number(bar.start):0;
-    const barDuration=typeof bar.calculateDuration==="function"?Number(bar.calculateDuration(false))||0:0;
-    for(const change of (bar.tempoAutomations||[])){
-      const bpm=Number(change.value),ratio=Math.max(0,Number(change.ratioPosition)||0);
-      if(Number.isFinite(bpm)&&bpm>0)events.push({tick:barStart+barDuration*ratio,bpm});
-    }
-  });
-  events.sort((a,b)=>a.tick-b.tick);
-  const compact=[];for(const ev of events){if(compact.length&&Math.abs(compact[compact.length-1].tick-ev.tick)<.01)compact[compact.length-1]=ev;else compact.push(ev)}
-  return compact;
+function stopDuoMidi(){duoMidiTimers.forEach(clearTimeout);duoMidiTimers=[];duoMidiNodes.forEach(n=>{try{n.stop()}catch(e){}});duoMidiNodes=[];if(duoMidiCtx){duoMidiCtx.close().catch(()=>{});duoMidiCtx=null}}
+function stopDuo(){
+  stopDuoPlayer(0);stopDuoPlayer(1);if(duoSharedAudio){duoSharedAudio.pause();duoSharedAudio.src="";duoSharedAudio=null}if(duoSharedUrl){URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=null}
+  stopDuoMidi();if(duoGpActive&&alphaTabApi){try{alphaTabApi.stop()}catch(e){}duoGpActive=false;}
+  $("duoGpPlayer").hidden=true;$("duoSessionStatus").textContent="Sesión detenida";toast("Sesión de dúo detenida.");
 }
-function alphaTicksToMs(tick,tempoMap){
-  let ms=0,lastTick=0,bpm=tempoMap[0]?.bpm||120;
-  for(let i=1;i<tempoMap.length;i++){
-    const ev=tempoMap[i];if(ev.tick>=tick)break;
-    ms+=(ev.tick-lastTick)*60000/(bpm*960);lastTick=ev.tick;bpm=ev.bpm;
-  }
-  return ms+Math.max(0,tick-lastTick)*60000/(bpm*960);
-}
-function flattenAlphaTrack(track,score){
-  const out=[],tempoMap=buildAlphaTempoMap(score||track?.score),masterBars=score?.masterBars||track?.score?.masterBars||[];
-  for(const staff of (track.staves||[]))for(let barIndex=0;barIndex<(staff.bars||[]).length;barIndex++){
-    const bar=staff.bars[barIndex],master=masterBars[barIndex];
-    const barStart=Number.isFinite(Number(master?.start))?Number(master.start):
-      (Number.isFinite(Number(bar?.start))?Number(bar.start):0);
-    for(const voice of (bar.voices||[]))for(const beat of (voice.beats||[])){
-      const beatStart=Number.isFinite(Number(beat.playbackStart))?Number(beat.playbackStart):
-        (Number.isFinite(Number(beat.displayStart))?Number(beat.displayStart):0);
-      const absoluteTick=barStart+beatStart;
-      // timer is absolute milliseconds; otherwise use the bar's absolute tick + local beat tick.
-      const timer=beat.timer==null?NaN:Number(beat.timer);
-      const timeMs=Number.isFinite(timer)&&timer>=0?timer:alphaTicksToMs(absoluteTick,tempoMap);
-      const durationTicks=Math.max(1,Number(beat.playbackDuration||beat.displayDuration||240));
-      const durationMs=Math.max(45,alphaTicksToMs(absoluteTick+durationTicks,tempoMap)-alphaTicksToMs(absoluteTick,tempoMap));
-      for(const note of (beat.notes||[])){
-        if(note.isPercussion||note.isPiano)continue;
-        const pitch=Number(note.realValue??note.realValueWithoutBend);if(!Number.isFinite(pitch))continue;
-        const stringNumber=Number(note.string)||0,fret=Number.isFinite(Number(note.fret))?Number(note.fret):"—";
-        const rawFinger=Number(note.leftHandFinger),finger=({2:1,3:2,4:3,5:4})[rawFinger]||((typeof fret==="number")?fingerFromFret(fret):0);
-        out.push({timeMs,durationMs,pitch:Math.round(pitch),name:midiName(Math.round(pitch)),stringNumber,fret,finger,hit:false,miss:false});
-      }
-    }
-  }
-  return out.sort((a,b)=>a.timeMs-b.timeMs);
-}
-function setGameTracks(items){updateTrackPickers(items);}
-async function loadGameGp(song){
-  if(gameChart?.id===song.id&&gameGpScore)return;
-  if(!window.alphaTab?.AlphaTabApi)throw new Error("No se pudo cargar el lector Guitar Pro. Revisa la conexión a internet y vuelve a intentar.");
-  if(gameGpApi){try{gameGpApi.destroy()}catch(e){}gameGpApi=null}
-  const root=$("duoGpPlayer");root.hidden=false;root.classList.add("game-gp-source");
-  const base="https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.9.0/dist/";
-  const api=new window.alphaTab.AlphaTabApi($("duoGpScore"),{core:{fontDirectory:base+"font/"},player:{enablePlayer:true,soundFont:base+"soundfont/sonivox.sf2"}});
-  gameGpApi=api;let settled=false;
-  const scorePromise=new Promise((resolve,reject)=>{
-    const timeout=setTimeout(()=>{if(!settled){settled=true;reject(new Error("Guitar Pro tardó demasiado en analizarse. Comprueba la conexión."))}},40000);
-    api.scoreLoaded.on(score=>{if(settled)return;settled=true;clearTimeout(timeout);resolve(score)});
-    api.error.on(error=>{if(!settled){settled=true;clearTimeout(timeout);reject(new Error(error.message||"Error al analizar Guitar Pro"))}});
-  });
-  const ok=api.load(new Uint8Array(await song.blob.arrayBuffer()));if(ok===false)throw new Error("alphaTab no pudo iniciar la lectura del archivo.");
-  gameGpScore=await scorePromise;gameGpTracks=(gameGpScore.tracks||[]).map((track,index)=>({index,name:track.name||`Pista ${index+1}`,notes:flattenAlphaTrack(track,gameGpScore)}));
-  setGameTracks(gameGpTracks.map(t=>({index:t.index,name:`${t.name} (${t.notes.length} notas)`})));
-  if(!gameGpTracks.some(t=>t.notes.length))throw new Error("La tablatura se pudo abrir, pero no contiene notas de guitarra/bajo utilizables en sus pistas.");
-  $("duoStageSong").textContent=gameGpScore.title||song.name;
-}
-async function getSongById(id){return id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):await songDbAction("readonly",{id})}
-async function prepareGameChart(id){
-  if(!id){gameChart=null;gamePlayerNotes=[[],[]];gameChartLoading=false;$("duoStartBtn").disabled=false;setDuoStatus("Selecciona una partitura MIDI o Guitar Pro, o carga un MP3/WAV para reproducir solo el audio.");return}
-  gameChartLoading=true;$("duoStartBtn").disabled=true;setDuoStatus("Preparando partitura y leyendo las pistas…");
-  try{
-    stopGame(true);const song=await getSongById(id);if(!song)throw new Error("No se encontró el archivo. Vuelve a abrir la biblioteca.");
-    gameChart=song;gameGpScore=null;gameGpTracks=[];
-    if(song.type!=="guitarpro"&&gameGpApi){try{gameGpApi.destroy()}catch(e){}gameGpApi=null}
-    if(song.type==="midi"){
-      const indexes=midiTrackIndexes(song);setGameTracks(indexes.map((index,i)=>({index,name:`Pista ${index+1} (${song.parsed.notes.filter(n=>(n.track??0)===index).length} notas)`})));
-    }else if(song.type==="guitarpro")await loadGameGp(song);
-    else throw new Error("Un MP3/WAV es audio de acompañamiento, no contiene tablatura. Selecciona también un MIDI o Guitar Pro.");
-    refreshPlayerCharts();
-    if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)throw new Error("La partitura se pudo abrir, pero no se encontraron notas reproducibles en las pistas.");
-    $("duoStageSong").textContent=song.name;$("gameStateTag").textContent="PARTITURA LISTA";setDuoStatus(`${song.name} preparada. Ya puedes pulsar Iniciar canción. No necesitas conectar micrófonos para escucharla.`);
-  }catch(e){console.error(e);gameChart=null;gamePlayerNotes=[[],[]];setDuoStatus("No se pudo preparar la partitura: "+(e.message||e));toast("No se pudo preparar: "+(e.message||e))}
-  finally{gameChartLoading=false;$("duoStartBtn").disabled=false}
-}
-function getSelectedTrackNotes(index){
-  const instrument=$("duoInstrument"+(index+1)).value,trackIndex=Number($("duoTrack"+(index+1)).value||0);
-  if(!gameChart)return [];
-  if(gameChart.type==="midi")return (gameChart.parsed.notes||[]).filter(n=>(Number.isFinite(n.track)?n.track:0)===trackIndex).map(n=>normalizeMidiNote(n,instrument)).sort((a,b)=>a.timeMs-b.timeMs);
-  if(gameChart.type==="guitarpro")return (gameGpTracks.find(t=>t.index===trackIndex)?.notes||[]).map(n=>({...n,hit:false,miss:false})).sort((a,b)=>a.timeMs-b.timeMs);
-  return [];
-}
-function refreshPlayerCharts(){gamePlayerNotes=[getSelectedTrackNotes(0),getSelectedTrackNotes(1)];gameDuration=Math.max(0,...gamePlayerNotes.flat().map(n=>n.timeMs+n.durationMs));renderGameNow(0)}
-function resetGameScores(){gameScore=[{hits:0,misses:0,points:0},{hits:0,misses:0,points:0}];[1,2].forEach(n=>{$("gameScore"+n).textContent="0";$("gameHitRate"+n).textContent="0 aciertos · 0 fallos";$("duoAccuracy"+n).textContent="—";$("gameResult"+n).textContent="Listo"});$("gameTeamScore").textContent="0"}
-function currentSongRecord(id){return duoRecords.find(r=>r.id===id)}
 async function startDuo(){
-  const startButton=$("duoStartBtn");
+  if($("duoConnection").value==="remote"){toast("La conexión entre dos dispositivos necesita configurar un servidor de emparejamiento. No está habilitada todavía.");return}
+  const id=$("duoSong").value;if(!id){toast("Selecciona una canción para los dos jugadores.");return}
+  if(!duoPlayers[0]||!duoPlayers[1]){toast("Conecta el audio de los dos jugadores antes de iniciar la canción.");return}
+  if(duoPlayers[0].stream===duoPlayers[1].stream||(duoPlayers[0].actualDeviceId||duoPlayers[0].deviceId||"")===(duoPlayers[1].actualDeviceId||duoPlayers[1].deviceId||"")&&duoPlayers[0].channelIndex===duoPlayers[1].channelIndex){toast("Las entradas de los jugadores no están separadas. Usa dos entradas o los canales 1 y 2 de una interfaz estéreo.");return}
+  const song=id.startsWith("builtin:")?BUILTIN_SONGS.find(x=>x.id===id):duoRecords.find(x=>x.id===id);if(!song){toast("No se encontró la canción seleccionada. Vuelve a abrir el modo Dúo para actualizar la biblioteca.");return}
   try{
-    if($("duoConnection").value==="remote")throw new Error("El modo entre dos dispositivos requiere un servidor de emparejamiento. Selecciona conexión local.");
-    // Files are loaded into duoRecords when the view/import flow is prepared.
-    // Do not await IndexedDB here: browsers may revoke the click's audio-start
-    // permission after an async gap, causing HTMLAudioElement.play() to reject.
-    if(gameChartLoading)throw new Error("La partitura todavía se está preparando. Espera a que termine la carga y pulsa Iniciar canción otra vez.");
-    const chartId=$("duoSong").value,backingId=$("gameBacking").value;
-    const backing=backingId?currentSongRecord(backingId):null;
-    if(chartId&&(!gameChart||gameChart.id!==chartId))await prepareGameChart(chartId);
-    if(chartId&&!gameChart)throw new Error("La partitura no quedó preparada. Revisa el mensaje de carga y vuelve a seleccionarla.");
-    if(!chartId){gameChart=null;gamePlayerNotes=[[],[]]}
-    if(gameChart){refreshPlayerCharts();if(!gamePlayerNotes[0].length&&!gamePlayerNotes[1].length)throw new Error("La partitura se abrió, pero las pistas seleccionadas no contienen notas tocables. Cambia la pista de uno de los jugadores.")}
-    if(!backing&&!gameChart)throw new Error("Carga un MP3/WAV para reproducir audio o un MIDI/Guitar Pro para iniciar una partida con notas.");
-
-    stopGame(false);
-    if(gameChart){gamePlayerNotes=[getSelectedTrackNotes(0),getSelectedTrackNotes(1)];gameDuration=Math.max(0,...gamePlayerNotes.flat().map(n=>n.timeMs+n.durationMs))}
-    else {gamePlayerNotes=[[],[]];gameDuration=0}
-    gameSpeed=Number($("gameSpeed").value)||1;resetGameScores();gameElapsedBeforePause=0;gameStarted=true;gamePaused=false;
-    startButton.disabled=true;setDuoStatus("Preparando audio y sincronizando la pista…");
-
-    if(backing){
-      if(!backing.blob)throw new Error("No se encontró el archivo de acompañamiento. Vuelve a importarlo.");
-      await startBackingAudio(backing,gameSpeed);gameClockMode="audio";
-      if(Number.isFinite(gameAudio?.duration)&&gameAudio.duration>0)gameDuration=Math.max(gameDuration,gameAudio.duration*1000);
-    }else if(gameChart.type==="midi"){
-      await startMidiGameSynth(gamePlayerNotes,gameSpeed);gameClockMode="midi";
-    }else if(gameChart.type==="guitarpro"){
-      // alphaTab remains responsible for reading the GP file and its tablature.
-      // Use its full SoundFont player when ready; otherwise the built-in WebAudio
-      // pluck synthesizer guarantees audible note playback instead of a dead start button.
-      let nativeStarted=false;
-      if(gameGpApi?.isReadyForPlayback){
-        try{gameGpApi.playbackSpeed=gameSpeed;nativeStarted=gameGpApi.play()===true}catch(error){console.warn("alphaTab playback failed; using note synth",error)}
-      }
-      if(nativeStarted)gameClockMode="gp";
-      else {await startMidiGameSynth(gamePlayerNotes,gameSpeed);gameClockMode="midi";$('rockUploadStatus').textContent="Guitar Pro: reproducción de referencia sintetizada para las notas de guitarra. La partitura original se conserva para la digitación."}
-    }
-    if(!gameClockMode||gameClockMode==="none")throw new Error("No se pudo crear una fuente de audio para esta canción.");
-    gameStartPerf=performance.now();gameStarted=true;gamePaused=false;
-    startButton.disabled=true;$("gamePauseBtn").disabled=false;$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";$("gameTempoLabel").textContent=Math.round(gameSpeed*100)+"%";
-    [0,1].forEach(i=>{$("gameResult"+(i+1)).textContent=duoPlayers[i]?"Escuchando tu ejecución":gamePlayerNotes[i].length?"Vista previa · conecta audio para puntuar":"Sin pista asignada"});
-    if(!gameChart)setDuoStatus("Reproduciendo audio. Para que aparezcan las notas, importa también la tablatura MIDI o Guitar Pro correspondiente.");
-    else setDuoStatus(duoPlayers.every(Boolean)?"Canción iniciada. Se evalúan las dos entradas por separado.":duoPlayers.some(Boolean)?"Canción iniciada. Un jugador conectado; el otro está en vista previa.":"Canción iniciada. La pista avanza sin necesidad de conectar micrófonos; conecta las entradas para evaluar tu ejecución.");
-    gameRAF=requestAnimationFrame(gameFrame);
-  }catch(e){stopGame(false);startButton.disabled=false;$("gamePauseBtn").disabled=true;console.error(e);setDuoStatus("No se pudo iniciar la reproducción: "+(e.message||e));toast("No arrancó la canción: "+(e.message||e))}
+    $("duoStageSong").textContent=song.name;$("duoStageStatus1").textContent="Entrada activa";$("duoStageStatus2").textContent="Entrada activa";$("duoGpPlayer").hidden=true;
+    if(duoSharedAudio){duoSharedAudio.pause();duoSharedAudio=null}if(duoSharedUrl){URL.revokeObjectURL(duoSharedUrl);duoSharedUrl=null}stopDuoMidi();
+    if(song.type==="audio"){
+      if(!song.blob)throw new Error("El archivo de audio no está guardado. Vuelve a importarlo.");
+      duoSharedUrl=URL.createObjectURL(song.blob);duoSharedAudio=new Audio();duoSharedAudio.src=duoSharedUrl;duoSharedAudio.preload="auto";duoSharedAudio.onended=()=>{$("duoSessionStatus").textContent="Canción finalizada · entradas aún activas"};duoSharedAudio.onerror=()=>{$("duoSessionStatus").textContent="No se pudo decodificar el audio elegido"};await duoSharedAudio.play();
+    }else if(song.type==="midi"&&song.parsed?.notes?.length){await playDuoMidi(song.parsed.notes)}
+    else if(song.type==="guitarpro"){
+      $("duoGpPlayer").hidden=false;const api=await loadGuitarPro(song,"duoGpScore","duoGpStatus","duoGpPlayBtn","duoGpPauseBtn","duoGpStopBtn");
+      if(!api.isReadyForPlayback)throw new Error("La tablatura cargó, pero el motor de audio aún no está listo.");
+      duoGpActive=false;$("duoGpStatus").textContent="Partitura lista. Pulsa «Reproducir partitura» para iniciar el sonido.";
+      $("duoSessionStatus").textContent="Partitura lista · esperando que inicies la reproducción";toast("Partitura preparada. Pulsa Reproducir partitura en el panel Dúo.");return;
+    }else throw new Error("Este formato todavía no se puede reproducir en modo Dúo.");
+    $("duoSessionStatus").textContent="Sesión activa · misma canción para ambos";toast("¡Reproducción compartida iniciada!");
+  }catch(e){console.error(e);$("duoSessionStatus").textContent="No se pudo iniciar la canción";toast("No arrancó la canción: "+(e.message||"error desconocido"))}
 }
-function waitForGpPlayerReady(api){return new Promise((resolve,reject)=>{if(api.isReadyForPlayback){resolve();return}let done=false;const timeout=setTimeout(()=>{if(!done){done=true;reject(new Error("El motor de sonido de Guitar Pro no terminó de cargar. Comprueba tu conexión e inténtalo otra vez."))}},35000);api.playerReady.on(()=>{if(!done){done=true;clearTimeout(timeout);resolve()}});api.error.on(e=>{if(!done){done=true;clearTimeout(timeout);reject(new Error(e.message||"Error en el motor de audio Guitar Pro"))}})})}
-async function startBackingAudio(record,speed){
-  if(gameAudio){gameAudio.pause();gameAudio=null}if(gameAudioUrl)URL.revokeObjectURL(gameAudioUrl);
-  gameAudioUrl=URL.createObjectURL(record.blob);gameAudio=new Audio();gameAudio.src=gameAudioUrl;gameAudio.preload="auto";gameAudio.playbackRate=speed;
-  await gameAudio.play();gameAudio.onended=()=>finishGame("La canción terminó.");
+async function playDuoMidi(notes){
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("El navegador no admite reproducción MIDI.");
+  duoMidiCtx=new AC({latencyHint:"interactive"});const ctx=duoMidiCtx;await ctx.resume();const base=ctx.currentTime+.16;
+  notes.forEach(n=>{const start=base+n.startMs/1000,duration=Math.min(4,Math.max(.07,n.durationMs/1000));schedulePluck(ctx,n.pitch,n.velocity,start,duration,duoMidiNodes)});
+  const end=Math.max(...notes.map(n=>n.startMs+n.durationMs));duoMidiTimers.push(setTimeout(()=>{$("duoSessionStatus").textContent="MIDI finalizado · entradas aún activas";stopDuoMidi()},end+350));
 }
-async function startMidiGameSynth(notesByPlayer,speed){
-  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)throw new Error("Este navegador no admite reproducción de audio.");
-  gameAudioCtx=new AC({latencyHint:"interactive"});await gameAudioCtx.resume();gameAudioBase=gameAudioCtx.currentTime+.18;
-  const unique=new Map();notesByPlayer.forEach((list,index)=>{const track=Number($("duoTrack"+(index+1)).value||0);if(!unique.has(track))unique.set(track,list)});
-  unique.forEach(list=>list.forEach(n=>{const start=gameAudioBase+n.timeMs/1000/speed,duration=Math.min(3,Math.max(.07,n.durationMs/1000/speed));schedulePluck(gameAudioCtx,n.pitch,92,start,duration,gameAudioNodes)}));
-}
-function getGameTimeMs(){
-  if(!gameStarted)return 0;
-  if(gameClockMode==="audio"&&gameAudio)return gameAudio.currentTime*1000;
-  if(gameClockMode==="midi"&&gameAudioCtx)return Math.max(0,(gameAudioCtx.currentTime-gameAudioBase)*1000*gameSpeed);
-  if(gameClockMode==="gp"&&gameGpApi)return Number(gameGpApi.timePosition)||0;
-  return 0;
-}
-function registerGamePitch(index,pitch,nowMs){
-  const notes=gamePlayerNotes[index];if(!notes?.length)return;
-  let best=null,bestDelta=Infinity;
-  for(const n of notes){if(n.hit||n.miss)continue;const delta=Math.abs(n.timeMs-nowMs);if(delta<bestDelta){bestDelta=delta;best=n}if(n.timeMs>nowMs+GAME_HIT_WINDOW_MS)break}
-  if(!best||bestDelta>GAME_HIT_WINDOW_MS)return;
-  if(best.pitch===pitch){best.hit=true;gameScore[index].hits++;gameScore[index].points+=100;updateGameScore(index);$("gameResult"+(index+1)).textContent="¡Correcto! +100";$("gameResult"+(index+1)).style.color="#42dda1";}
-  else if(nowMs>=best.timeMs-GAME_HIT_WINDOW_MS){/* no penaliza otra nota mientras haya una nota objetivo en ventana */}
-}
-function updateGameScore(index){const n=index+1,s=gameScore[index],total=s.hits+s.misses,accuracy=total?Math.round(s.hits/total*100):0;$("gameScore"+n).textContent=s.points.toLocaleString("es-CO");$("gameHitRate"+n).textContent=`${s.hits} aciertos · ${s.misses} fallos`;$("duoAccuracy"+n).textContent=total?accuracy+"%":"—";$("gameTeamScore").textContent=(gameScore[0].points+gameScore[1].points).toLocaleString("es-CO")}
-function markMisses(nowMs){[0,1].forEach(i=>{if(!duoPlayers[i])return;for(const n of gamePlayerNotes[i]){if(!n.hit&&!n.miss&&nowMs>n.timeMs+GAME_HIT_WINDOW_MS){n.miss=true;gameScore[i].misses++;$("gameResult"+(i+1)).textContent="Nota no acertada";$("gameResult"+(i+1)).style.color="#ff8b78";updateGameScore(i)}}})}
-function getStringRow(note,instrument){const max=instrument.includes("Bajo")?4:6;const num=Number(note.stringNumber)||1;return Math.max(0,Math.min(max-1,max-num))}
-function drawHighway(index,nowMs){
-  const canvas=$("duoHighway"+(index+1));if(!canvas)return;const rect=canvas.getBoundingClientRect();if(rect.width<10)return;
-  const dpr=Math.min(2,window.devicePixelRatio||1),w=Math.floor(rect.width*dpr),h=Math.floor(rect.height*dpr);if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
-  const ctx=canvas.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);const W=rect.width,H=rect.height;
-  const instrument=$("duoInstrument"+(index+1)).value,bass=instrument.includes("Bajo"),strings=bass?4:6,top=25,bottom=H-22,laneGap=(bottom-top)/(strings-1),hitX=Math.max(64,W*.22),pixelsPerSec=(W-hitX-30)/(GAME_LOOKAHEAD_MS/1000),notes=gamePlayerNotes[index]||[];
-  ctx.clearRect(0,0,W,H);const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,"#0a1a2b");grad.addColorStop(1,"#07101b");ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
-  // runway perspective and beat grid
-  ctx.fillStyle=index===0?"rgba(42,166,235,.08)":"rgba(255,145,65,.08)";ctx.beginPath();ctx.moveTo(hitX,top-14);ctx.lineTo(W,0);ctx.lineTo(W,H);ctx.lineTo(hitX,bottom+14);ctx.closePath();ctx.fill();
-  for(let t=0;t<=GAME_LOOKAHEAD_MS;t+=500){const x=hitX+t/1000*pixelsPerSec;ctx.strokeStyle=t===0?"rgba(255,255,255,.12)":"rgba(180,205,230,.10)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,8);ctx.lineTo(x,H-8);ctx.stroke()}
-  for(let s=0;s<strings;s++){const y=top+s*laneGap;ctx.strokeStyle=s===strings-1?"rgba(255,255,255,.55)":"rgba(160,190,215,.35)";ctx.lineWidth=s===strings-1?2:1;ctx.beginPath();ctx.moveTo(hitX,y);ctx.lineTo(W-8,y);ctx.stroke();ctx.fillStyle="rgba(210,225,240,.55)";ctx.font="9px system-ui";ctx.fillText(bass?["G","D","A","E"][s]:["e","B","G","D","A","E"][s],10,y+3)}
-  ctx.fillStyle=index===0?"#4bc1ff":"#ff9a4b";ctx.fillRect(hitX-2,8,4,H-16);ctx.fillStyle="rgba(255,255,255,.8)";ctx.font="9px system-ui";ctx.fillText("TOCA",hitX-14,12);
-  for(const note of notes){const delta=note.timeMs-nowMs;if(delta< -330||delta>GAME_LOOKAHEAD_MS)continue;const x=hitX+delta/1000*pixelsPerSec;const row=getStringRow(note,instrument),y=top+row*laneGap;const color=index===0?"#25aef7":"#ff963f";const width=Math.max(24,Math.min(42,30+Math.max(0,note.durationMs-100)*.04));
-    ctx.globalAlpha=note.hit?.45:note.miss?.28:1;ctx.shadowColor=color;ctx.shadowBlur=note.hit?0:10;ctx.fillStyle=note.hit?"#36d69b":note.miss?"#7c8795":color;roundRect(ctx,x-width/2,y-12,width,24,7);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle="#07111b";ctx.font="bold 12px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(String(note.fret),x,y);
-    if(note.finger){ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(x+width/2-1,y-10,6,0,Math.PI*2);ctx.fill();ctx.fillStyle="#07111b";ctx.font="bold 8px system-ui";ctx.fillText(String(note.finger),x+width/2-1,y-10)}ctx.globalAlpha=1;ctx.textAlign="left";ctx.textBaseline="alphabetic";
-  }
-}
-function roundRect(ctx,x,y,w,h,r){if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}else{ctx.beginPath();ctx.rect(x,y,w,h)}}
-function renderGameNow(nowMs){
-  [0,1].forEach(i=>{const next=(gamePlayerNotes[i]||[]).find(n=>!n.hit&&!n.miss&&n.timeMs>=nowMs-100);if(next){$("gameTarget"+(i+1)).textContent=next.name;const inst=$("duoInstrument"+(i+1)).value,strings=inst.includes("Bajo")?["4ª · Mi","3ª · La","2ª · Re","1ª · Sol"]:["6ª · Mi","5ª · La","4ª · Re","3ª · Sol","2ª · Si","1ª · Mi agudo"];const stringLabel=next.stringNumber?strings[next.stringNumber-1]||(`Cuerda ${next.stringNumber}`):"Cuerda sugerida";$("gamePosition"+(i+1)).textContent=`${stringLabel} · Traste ${next.fret} · Dedo ${fingerName(next.finger)}`}else{$("gameTarget"+(i+1)).textContent="—";$("gamePosition"+(i+1)).textContent="Fin de pista"}drawHighway(i,nowMs)})
-}
-function gameFrame(){if(!gameStarted||gamePaused)return;const now=getGameTimeMs();markMisses(now);renderGameNow(now);$("gameClock").textContent=formatSongTime(now);const pct=gameDuration?Math.min(100,now/gameDuration*100):0;$("gameProgressBar").style.width=pct+"%";
-  if(gameClockMode==="audio"&&gameAudio?.ended){finishGame("La canción terminó.");return}
-  if(gameClockMode==="gp"&&gameGpApi&&now>=gameDuration&&gameDuration>0){finishGame("La partitura terminó.");return}
-  if(gameClockMode==="midi"&&gameAudioCtx&&now>=gameDuration+500){finishGame("La canción terminó.");return}
-  gameRAF=requestAnimationFrame(gameFrame)
-}
-function finishGame(message){if(!gameStarted)return;gameStarted=false;gamePaused=false;cancelAnimationFrame(gameRAF);if(gameClockMode==="gp"&&gameGpApi){try{gameGpApi.stop()}catch(e){}}if(gameClockMode==="audio"&&gameAudio)gameAudio.pause();if(gameClockMode==="midi"&&gameAudioCtx){gameAudioCtx.close().catch(()=>{});gameAudioCtx=null;gameAudioNodes=[];}$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;$("gameStateTag").textContent="CANCIÓN FINALIZADA";setDuoStatus(`${message} Jugador 1: ${gameScore[0].hits} aciertos de ${gameScore[0].hits+gameScore[0].misses}. Jugador 2: ${gameScore[1].hits} aciertos de ${gameScore[1].hits+gameScore[1].misses}.`)}
-async function pauseGame(){if(!gameStarted)return;if(!gamePaused){gamePaused=true;gamePauseAt=performance.now();if(gameClockMode==="audio")gameAudio?.pause();else if(gameClockMode==="gp")gameGpApi?.pause();else if(gameClockMode==="midi"&&gameAudioCtx)await gameAudioCtx.suspend();$("gamePauseBtn").textContent="▶ Continuar";$("gameStateTag").textContent="PAUSADO";cancelAnimationFrame(gameRAF)}else{gamePaused=false;try{if(gameClockMode==="audio")await gameAudio?.play();else if(gameClockMode==="gp"){if(!gameGpApi?.play())throw new Error("alphaTab no pudo continuar.")}else if(gameClockMode==="midi"&&gameAudioCtx)await gameAudioCtx.resume();$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameStateTag").textContent="REPRODUCIENDO";gameRAF=requestAnimationFrame(gameFrame)}catch(e){gamePaused=true;$("gameStateTag").textContent="PAUSADO · ERROR DE AUDIO";setDuoStatus("No se pudo continuar la reproducción: "+(e.message||e))}}}
-function stopGame(stopApi=true){cancelAnimationFrame(gameRAF);gameStarted=false;gamePaused=false;if(gameAudio){gameAudio.pause();gameAudio.currentTime=0;gameAudio=null}if(gameAudioUrl){URL.revokeObjectURL(gameAudioUrl);gameAudioUrl=null}gameAudioNodes.forEach(n=>{try{n.stop()}catch(e){}});gameAudioNodes=[];if(gameAudioCtx){gameAudioCtx.close().catch(()=>{});gameAudioCtx=null}if(stopApi&&gameGpApi){try{gameGpApi.stop()}catch(e){}}gameClockMode="none";$("duoStartBtn").disabled=false;$("gamePauseBtn").disabled=true;$("gamePauseBtn").textContent="Ⅱ Pausar";$("gameClock").textContent="00:00";$("gameProgressBar").style.width="0%";if($("gameStateTag"))$("gameStateTag").textContent=gameChart?"PARTITURA LISTA":"ESPERANDO CANCIÓN"}
-function stopDuo(){stopGame();[0,1].forEach(stopDuoPlayer);setDuoStatus("Sesión detenida. Las entradas de audio se han desconectado.");toast("Sesión detenida.")}
-function onGameChartChange(){prepareGameChart($("duoSong").value)}
-$("duoConnect1").addEventListener("click",()=>connectDuoPlayer(0));$("duoConnect2").addEventListener("click",()=>connectDuoPlayer(1));
-$("duoStartBtn").addEventListener("click",startDuo);$("gamePauseBtn").addEventListener("click",pauseGame);$("duoStopBtn").addEventListener("click",stopDuo);
-$("duoSong").addEventListener("change",onGameChartChange);$("gameSpeed").addEventListener("change",()=>{$("gameTempoLabel").textContent=Math.round(Number($("gameSpeed").value)*100)+"%"});
-[1,2].forEach(n=>{$("duoInstrument"+n).addEventListener("change",()=>{updateDuoInstrumentLabels();if(gameChart?.type==="midi")refreshPlayerCharts()});$("duoTrack"+n).addEventListener("change",refreshPlayerCharts)});
-$("duoConnection").addEventListener("change",e=>{if(e.target.value==="remote"){$("duoConnectionNote").textContent="El modo remoto requiere un servidor de emparejamiento y sincronización. No está habilitado en GitHub Pages sin ese servicio."}else{$("duoConnectionNote").textContent="Para dos guitarras reales necesitas dos dispositivos de entrada independientes o una interfaz estéreo con canales separados. Un MP3 solo aporta el acompañamiento; para mostrar cuerda/traste se necesita una tablatura GP o MIDI."}});
-if(navigator.mediaDevices?.addEventListener)navigator.mediaDevices.addEventListener("devicechange",populateDuoInputs);
-window.addEventListener("resize",()=>{if(gameChart)renderGameNow(getGameTimeMs())});
+$("duoConnect1").addEventListener("click",()=>connectDuoPlayer(0));$("duoConnect2").addEventListener("click",()=>connectDuoPlayer(1));$("duoStopBtn").addEventListener("click",stopDuo);$("duoStartBtn").addEventListener("click",startDuo);
+[1,2].forEach(n=>$("duoInstrument"+n).addEventListener("change",updateDuoInstrumentLabels));
+$("duoConnection").addEventListener("change",e=>{const remote=e.target.value==="remote";$("duoConnectionNote").textContent=remote?"La modalidad entre dos dispositivos todavía necesita un servidor de emparejamiento. Usa el modo local para esta versión.":"Conecta dos entradas de audio distintas, o selecciona una interfaz estéreo y asigna canal 1 al jugador 1 y canal 2 al jugador 2.";$("duoPlayerGrid").classList.toggle("remote-preview",remote)});
 
 $("songFiles").addEventListener("change",e=>{if(e.target.files?.length)importSongFiles([...e.target.files]);e.target.value=""});
-$("rockSongFiles").addEventListener("change",async e=>{
-  const files=[...(e.target.files||[])];e.target.value="";if(!files.length)return;
-  const status=$("rockUploadStatus");status.textContent="Importando archivos y preparando los selectores de Modo Rock…";
-  try{
-    const ids=await importSongFiles(files,{openSingleAudio:false});
-    const imported=await Promise.all(ids.map(id=>songDbAction("readonly",{id})));
-    const chart=[...imported].reverse().find(r=>r&&(r.type==="midi"||r.type==="guitarpro"));
-    const backing=[...imported].reverse().find(r=>r&&r.type==="audio");
-    await initDuoView({chartId:chart?.id,backingId:backing?.id});
-    if(chart&&backing)status.textContent=`Listo: ${chart.name} quedó como partitura y ${backing.name} como acompañamiento. Comprueba que ambos empiecen en el mismo punto.`;
-    else if(chart)status.textContent=`Partitura cargada: ${chart.name}. Ya está seleccionada en «Partitura / archivo de notas». Pulsa «Iniciar canción» cuando el motor termine de prepararla.`;
-    else if(backing)status.textContent=`Audio cargado: ${backing.name}. Quedó seleccionado como acompañamiento. Para mostrar notas, cuerda y traste debes importar también una partitura MIDI o Guitar Pro.`;
-    else status.textContent=ids.length?"Archivos importados. Revisa la biblioteca y los selectores.":"No se importó ningún archivo. Comprueba el formato y vuelve a intentarlo.";
-  }catch(err){console.error(err);status.textContent="No se pudo completar la importación: "+(err.message||err);toast("Error al cargar archivos: "+(err.message||err));}
-});
 $("songLibrary").addEventListener("click",async e=>{const open=e.target.closest("[data-open-song]"),del=e.target.closest("[data-delete-song]");if(open)await openSong(open.dataset.openSong);if(del){if(confirm("¿Eliminar esta canción de tu biblioteca local?")){await songDbAction("readwrite",{id:del.dataset.deleteSong,delete:true});await renderSongLibrary();closeSongWorkspace();toast("Canción eliminada del dispositivo.")}}});
 $("closeSongBtn").addEventListener("click",closeSongWorkspace);$("midiPlayBtn").addEventListener("click",playMidi);$("midiStopBtn").addEventListener("click",()=>stopMidiPlayback("Reproducción detenida."));
 $("midiPracticeBtn").addEventListener("click",()=>{if(!currentMidiNotes.length)return;songPracticeMode=true;songPracticeNotes=currentMidiNotes;songPracticeIndex=0;setExercise();showView("practice");setFeedback("Toca la primera nota de la canción",false);toast("Modo práctica de canción activado. Conecta el audio para evaluar tus notas.")});
